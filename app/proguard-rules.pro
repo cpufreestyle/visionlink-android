@@ -41,8 +41,8 @@
 # ============ CXR-M SDK 保护 (如果集成) ============
 
 # 取消注释当集成真实 CXR-M SDK 时
-# -keep class com.okid.cxrm.** { *; }
-# -keep interface com.okid.cxrm.** { *; }
+# -keep class com.Rokid.cxrm.** { *; }
+# -keep interface com.Rokid.cxrm.** { *; }
 
 # ============ Kotlin 协程 ============
 
