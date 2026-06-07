@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- 摄像头权限 (视觉输入) -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    
+    <!-- 麦克风权限 (语音输出需要) -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    
+    <!-- 网络权限 (CXR-M 眼镜连接) -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    
+    <!-- 存储权限 (模型文件) -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" 
+        tools:ignore="ScopedStorage" />
+    
+    <!-- 保持屏幕常亮 (眼镜使用场景) -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <!-- 要求 Android 13+ (API 33) -->
+    <uses-sdk android:minSdkVersion="33" android:targetSdkVersion="34" />
+
+    <application
+        android:name=".VisionLinkApplication"
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.VisionLink"
+        android:hardwareAccelerated="true"
+        android:largeHeap="true"
+        tools:targetApi="34">
+
+        <!-- 主 Activity (HUD 界面) -->
+        <activity
+            android:name=".ui.MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:screenOrientation="landscape"  <!-- 横屏适配眼镜 -->
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:windowSoftInputMode="stateAlwaysHidden">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- CXR-M 眼镜连接服务 -->
+        <service
+            android:name=".glasses.CXRGlassesService"
+            android:enabled="true"
+            android:exported="false" />
+
+        <!-- AI 推理服务 (后台运行) -->
+        <service
+            android:name=".ai.AIInferenceService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="ml" />
+
+    </application>
+
+</manifest>
