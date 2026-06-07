@@ -34,7 +34,7 @@
 - ✅ **全离线运行**: 无需网络，所有 AI 推理在手机本地完成
 - ✅ **低延迟**: 端侧推理，响应速度快
 - ✅ **隐私保护**: 图像数据不上传云端
-- ✅ **眼镜集成**: 通过 CXR-M SDK 连接智能眼镜 (OKID)
+- ✅ **眼镜集成**: 通过 CXR-M SDK 连接智能眼镜 (Rokid)
 - ✅ **多模式**: 避障、文字阅读、场景描述三种模式
 
 ### 对应 PC 版功能映射
@@ -69,7 +69,7 @@
 | **推理框架** | LiteRT-LM + LiteRT | Google 端侧推理框架 |
 | **摄像头** | CameraX | AndroidX Camera 库 |
 | **语音** | Android TTS | 系统自带 TTS 引擎 |
-| **眼镜** | CXR-M SDK (OKID) | 智能眼镜连接 (模拟) |
+| **眼镜** | CXR-M SDK (Rokid) | 智能眼镜连接 (模拟) |
 | **架构** | 手机主控，眼镜从端 | 手机处理 AI，眼镜显示+音频 |
 
 ### 3️⃣ 系统要求
@@ -609,7 +609,7 @@ private const val MAX_TOKENS = 128  // 从 256 减少到 128，加快推理速�
 ## 🙏 致谢
 
 - **Google LiteRT-LM 团队** - 提供端侧 LLM 推理框架
-- **OKID** - 提供 CXR-M 智能眼镜 SDK
+- **Rokid** - 提供 CXR-M 智能眼镜 SDK
 - **TensorFlow Lite 团队** - 提供视觉模型推理框架
 - **PC 版作者** - [VisionLink-AI-Glasses](https://github.com/your-repo/VisionLink-AI-Glasses)
 
