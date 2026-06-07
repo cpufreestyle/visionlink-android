@@ -88,7 +88,7 @@ dependencies {
     implementation("com.google.ai.edge.litert:litert:1.1.0")
     implementation("org.tensorflow:tensorflow-lite-gpu:2.16.1")
 
-    // CXR-M SDK (眼镜连接 - OKID)
+    // CXR-M SDK (眼镜连接 - Rokid)
     // 需要手动下载 SDK，放入 libs/ 目录
     // implementation(files("libs/cxr-m-sdk.aar"))
 
