@@ -24,7 +24,7 @@ class CXRGlassesManager(private val context: Context) {
         
         // C
         // 实际项目中需要替换为真实的 SDK 包名
-        private const val CXR_PACKAGE = "com.okid.cxrm"
+        private const val CXR_PACKAGE = "com.Rokid.cxrm"
     }
     
     private var isConnected = false
