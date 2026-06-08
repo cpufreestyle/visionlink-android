@@ -9,13 +9,12 @@ import java.util.*
 /**
  * TTS 语音管理器
  * 
- * 功能映射 (对应 PC 版 main.py):
- * - speak(text) → TTSManager.speak(text)
- * - System.Speech.Synthesis.SpeechSynthesizer → Android TTS
- * - Add-Type -AssemblyName System.Speech → android.speech.tts
- * 
- * 技术栈: Android TTS (TextToSpeech)
- * 输出: 手机扬声器 + 眼镜音频 (通过 CXR-M)
+ * 优化点 (v1.1):
+ * - 移除冗余的 initialize() 方法 (已在 init 中初始化)
+ * - pendingText 改为线程安全 (synchronized)
+ * - 添加语音参数初始化调用
+ * - 添加发音完成回调
+ * - 添加队列管理
  */
 class TTSManager(
     private val context: Context,
@@ -29,60 +28,101 @@ class TTSManager(
     private var tts: TextToSpeech? = null
     private var isInitialized = false
     private var pendingText: String? = null
+    private val pendingLock = Any()
+    
+    // 发音完成回调
+    private var utteranceCallback: ((String, Boolean) -> Unit)? = null
     
     init {
-        tts = TextToSpeech(context, initListener)
-    }
-    
-    /**
-     * 初始化 TTS (对应 PC 版 $s = New-Object System.Speech.Synthesis.SpeechSynthesizer)
-     */
-    fun initialize() {
         tts = TextToSpeech(context) { status ->
             if (status == TextToSpeech.SUCCESS) {
-                // 设置中文语音 (对应 PC 版中文播报)
+                // 设置中文语音
                 val result = tts?.setLanguage(Locale.CHINESE)
                 
                 if (result == TextToSpeech.LANG_MISSING_DATA || 
                     result == TextToSpeech.LANG_NOT_SUPPORTED) {
-                    Log.e(TAG, "❌ 中文语音不支持")
-                    // 降级到默认语音
+                    Log.w(TAG, "Chinese not supported, falling back to US English")
                     tts?.setLanguage(Locale.US)
                 } else {
-                    Log.d(TAG, "✅ TTS 初始化成功 (中文)")
+                    Log.d(TAG, "TTS initialized (Chinese)")
                     isInitialized = true
                     
+                    // 设置语音参数
+                    setVoiceParams()
+                    
+                    // 设置发音监听
+                    setupUtteranceListener()
+                    
                     // 发送待处理的文本
-                    pendingText?.let {
-                        speak(it)
-                        pendingText = null
+                    synchronized(pendingLock) {
+                        pendingText?.let {
+                            speakInternal(it)
+                            pendingText = null
+                        }
                     }
+                    
+                    // 通知初始化监听器
+                    initListener.onInit(status)
                 }
             } else {
-                Log.e(TAG, "❌ TTS 初始化失败")
+                Log.e(TAG, "TTS initialization failed")
+                initListener.onInit(status)
             }
         }
     }
     
     /**
-     * 语音播报 (对应 PC 版 speak(text) 函数)
-     * 
-     * PC 版代码:
-     *   print(f"🎧 [语音播报]: {text}")
-     *   clean_text = text.replace('"', '').replace("'", "")...
-     *   command = f'''powershell -c "Add-Type -AssemblyName System.Speech; ..."""
-     *   threading.Thread(target=run_cmd, daemon=True).start()
-     * 
-     * Android 版: 直接调用 TTS，异步执行
+     * 设置语音参数
+     */
+    private fun setVoiceParams() {
+        // 设置语速 (1.0 = 正常)
+        tts?.setSpeechRate(1.0f)
+        
+        // 设置音调 (1.0 = 正常)
+        tts?.setPitch(1.0f)
+    }
+    
+    /**
+     * 设置发音监听
+     */
+    private fun setupUtteranceListener() {
+        tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+            override fun onStart(utteranceId: String?) {
+                Log.d(TAG, "TTS started: $utteranceId")
+            }
+            
+            override fun onDone(utteranceId: String?) {
+                Log.d(TAG, "TTS completed: $utteranceId")
+                utteranceCallback?.invoke(utteranceId ?: "", true)
+            }
+            
+            override fun onError(utteranceId: String?) {
+                Log.e(TAG, "TTS error: $utteranceId")
+                utteranceCallback?.invoke(utteranceId ?: "", false)
+            }
+        })
+    }
+    
+    /**
+     * 语音播报 (公开方法)
      */
     fun speak(text: String) {
         if (!isInitialized) {
-            Log.w(TAG, "⚠️ TTS 未初始化，缓存文本")
-            pendingText = text
+            Log.w(TAG, "TTS not initialized, caching text")
+            synchronized(pendingLock) {
+                pendingText = text
+            }
             return
         }
         
-        // 清理文本 (对应 PC 版 clean_text 处理)
+        speakInternal(text)
+    }
+    
+    /**
+     * 内部播报方法
+     */
+    private fun speakInternal(text: String) {
+        // 清理文本
         val cleanText = text
             .replace("\"", "")
             .replace("'", "")
@@ -90,51 +130,79 @@ class TTSManager(
             .replace(""", "")
             .replace("\n", " ")
         
-        Log.d(TAG, "🎧 [语音播报]: $cleanText")
+        Log.d(TAG, "Speaking: $cleanText")
         
-        // 异步播报 (对应 PC 版 threading.Thread)
+        // 异步播报 (清空队列，立即播报)
+        val utteranceId = "VisionLink_${System.currentTimeMillis()}"
+        val params = HashMap<String, String>()
+        params[TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID] = utteranceId
+        
         tts?.speak(
             cleanText,
-            TextToSpeech.QUEUE_FLUSH,  // 清空队列，立即播报
-            null,
-            "VisionLink_${System.currentTimeMillis()}"
+            TextToSpeech.QUEUE_FLUSH,
+            params
         )
     }
     
     /**
-     * 设置语音参数 (可选优化)
+     * 设置发音完成回调
      */
-    fun setVoiceParams() {
-        // 设置语速 (0.5 = 慢, 1.0 = 正常, 2.0 = 快)
-        tts?.setSpeechRate(1.0f)
-        
-        // 设置音调 (0.5 = 低, 1.0 = 正常, 2.0 = 高)
-        tts?.setPitch(1.0f)
+    fun setUtteranceCallback(callback: (String, Boolean) -> Unit) {
+        this.utteranceCallback = callback
     }
     
     /**
      * 停止播报
      */
     fun stop() {
-        tts?.stop()
-        Log.d(TAG, "✅ TTS 已停止")
+        try {
+            tts?.stop()
+            Log.d(TAG, "TTS stopped")
+        } catch (e: Exception) {
+            Log.w(TAG, "Error stopping TTS: ${e.message}")
+        }
     }
     
     /**
-     * 释放资源 (对应 PC 版 $s.Dispose())
+     * 释放资源
      */
     fun release() {
-        tts?.stop()
-        tts?.shutdown()
+        try {
+            tts?.stop()
+            tts?.shutdown()
+        } catch (e: Exception) {
+            Log.w(TAG, "Error releasing TTS: ${e.message}")
+        }
         tts = null
         isInitialized = false
-        Log.d(TAG, "✅ TTS 已释放")
+        pendingText = null
+        utteranceCallback = null
+        Log.d(TAG, "TTS released")
     }
     
     /**
      * 检查是否正在播报
      */
     fun isSpeaking(): Boolean {
-        return tts?.isSpeaking ?: false
+        return try {
+            tts?.isSpeaking ?: false
+        } catch (e: Exception) {
+            false
+        }
+    }
+    
+    /**
+     * 等待播报完成
+     */
+    fun awaitCompletion(timeoutMs: Long = 5000): Boolean {
+        val startTime = System.currentTimeMillis()
+        while (isSpeaking()) {
+            if (System.currentTimeMillis() - startTime > timeoutMs) {
+                Log.w(TAG, "TTS await timeout")
+                return false
+            }
+            Thread.sleep(100)
+        }
+        return true
     }
 }
