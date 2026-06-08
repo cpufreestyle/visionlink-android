@@ -1,4 +1,4 @@
-package com.visionlink.android.ai
+﻿package com.visionlink.android.ai
 
 import android.content.Context
 import android.os.Build
@@ -300,7 +300,12 @@ class AIInferenceManager(private val context: Context) {
     }
 
     private fun isSamsungDevice(): Boolean {
-        return Build.MANUFACTURER.equals("samsung", ignoreCase = true)
+        val isSamsung = Build.MANUFACTURER.equals("samsung", ignoreCase = true)
+        val model = Build.MODEL
+        val isS24 = model.contains("SM-S928") || model.contains("SM-S926") || model.contains("SM-S921")
+        val isS25 = model.contains("SM-S938") || model.contains("SM-S936") || model.contains("SM-S931")
+        Log.d(TAG, "Samsung device detected: $model (S24: $isS24, S25: $isS25)")
+        return isSamsung || isS24 || isS25
     }
 
     // ========== 模型就绪 ==========
@@ -576,3 +581,5 @@ class AIInferenceManager(private val context: Context) {
         _state.value = _state.value.update()
     }
 }
+
+
