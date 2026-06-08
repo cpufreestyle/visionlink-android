@@ -5,19 +5,18 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
-    id("kotlin-kapt")
 }
 
 android {
     namespace = "com.visionlink.android"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.visionlink.android"
         minSdk = 33  // Android 13+
-        targetSdk = 34
-        versionCode = 1
-        versionName = "1.0.0"
+        targetSdk = 35
+        versionCode = 2
+        versionName = "1.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         
@@ -52,7 +51,6 @@ android {
 
     buildFeatures {
         viewBinding = true
-        dataBinding = true
     }
 
     packaging {
@@ -81,24 +79,21 @@ dependencies {
     implementation("androidx.camera:camera-view:1.4.0")
 
     // LiteRT-LM (Gemma 4 E2B 推理)
-    // 官方: developers.google.com/litert-lm
-    implementation("com.google.ai.edge.litert-lm:litert-lm:1.0.0")
-    
-    // LiteRT (视觉模型 .tflite)
-    implementation("com.google.ai.edge.litert:litert:1.1.0")
-    implementation("org.tensorflow:tensorflow-lite-gpu:2.16.1")
+    // 官方: https://developers.google.com/litert-lm
+    implementation("com.google.ai.edge.litert-lm:litert-lm:0.2.0")
 
+    // LiteRT (视觉推理 .tflite)
+    implementation("com.google.ai.edge.litert:litert:1.1.0")
+    
     // CXR-M SDK (眼镜连接 - Rokid)
     // 需要手动下载 SDK，放入 libs/ 目录
     // implementation(files("libs/cxr-m-sdk.aar"))
 
     // 协程 (异步处理)
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.9.0")
 
     // JSON 解析
     implementation("com.google.code.gson:gson:2.11.0")
-    implementation("org.json:json:20240303")
 
     // 测试
     testImplementation("junit:junit:4.13.2")
@@ -109,18 +104,18 @@ dependencies {
 // 下载 Gemma 4 E2B 模型任务
 tasks.register("downloadGemmaModel") {
     doLast {
-        println("📥 请手动下载 Gemma 4 E2B .litertlm 模型:")
-        println("   1. 访问: https://developers.google.com/litert-lm/docs/get-started")
-        println("   2. 下载 gemma-4-e2b-it.litertlm")
-        println("   3. 放入: app/src/main/assets/models/")
+        println("Please download Gemma 4 E2B .litertlm model:")
+        println("   1. Visit: https://developers.google.com/litert-lm/docs/get-started")
+        println("   2. Download gemma-4-e2b-it.litertlm")
+        println("   3. Place in: app/src/main/assets/models/")
     }
 }
 
 tasks.register("downloadVisionModel") {
     doLast {
-        println("📥 请手动下载视觉模型 .tflite:")
-        println("   1. 访问: https://www.tensorflow.org/lite/models")
-        println("   2. 下载适合的移动视觉模型 (如 MobileNetV3)")
-        println("   3. 放入: app/src/main/assets/models/")
+        println("Please download vision model (.tflite):")
+        println("   1. Visit: https://www.tensorflow.org/lite/models")
+        println("   2. Download MobileNetV3 or similar")
+        println("   3. Place in: app/src/main/assets/models/")
     }
 }
