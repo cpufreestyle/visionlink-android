@@ -47,7 +47,7 @@
             android:id="@+id/tvMode"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Mode: Obstacle"
+            android:text="Mode 1: Obstacle"
             android:textColor="#00FF00"
             android:textSize="18sp"
             android:textStyle="bold" />

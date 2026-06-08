@@ -1,4 +1,68 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">VisionLink</string>
+    <!-- Main UI -->
+    <string name="mode_obstacle">Mode 1: Obstacle</string>
+    <string name="mode_text">Mode 2: Text</string>
+    <string name="mode_scene">Mode 3: Scene</string>
+    <string name="download_model">Download\nModel</string>
+    <string name="init_ai">Init AI</string>
+    <string name="check_aicore">Check\nAICore</string>
+    <string name="start_continuous">Start\nContinuous</string>
+    <string name="stop_continuous">Stop\nContinuous</string>
+    <string name="capture_single">Capture\nAnalyze</string>
+    <string name="settings">Settings</string>
+    <string name="exit">Exit</string>
+    <!-- Status -->
+    <string name="status_ready">Ready</string>
+    <string name="status_initializing">Initializing…</string>
+    <string name="status_analyzing">Analyzing…</string>
+    <string name="tap_init_ai">Tap Init AI</string>
+    <string name="ai_ready">AI Ready</string>
+    <string name="engine_aicore">Engine: AICore (Gemini Nano)</string>
+    <string name="engine_edge">Engine: Edge (Gemma 4)</string>
+    <string name="engine_litert">Engine: LiteRT-LM (Gemma 4 E2B)</string>
+    <string name="engine_cloud">Engine: Cloud (API)</string>
+    <string name="engine_none">Engine: Not selected</string>
+    <string name="glasses_na">Glasses: N/A</string>
+    <string name="glasses_connected">Glasses: Connected</string>
+    <string name="glasses_disconnected">Glasses: Disconnected</string>
+    <!-- Voice Command -->
+    <string name="voice_listening">Listening...</string>
+    <string name="voice_command_matched">Command received: %s</string>
+    <string name="voice_command_help">Say \"help\" for all commands</string>
+    <string name="voice_not_available">Voice recognition unavailable</string>
+    <!-- BLE Ring -->
+    <string name="ring_scanning">Scanning for rings...</string>
+    <string name="ring_found">Ring found: %s</string>
+    <string name="ring_connected">Ring connected</string>
+    <string name="ring_disconnected">Ring disconnected</string>
+    <string name="ring_tap">Single tap</string>
+    <string name="ring_double_tap">Double tap</string>
+    <string name="ring_long_press">Long press</string>
+    <string name="ring_gesture">Gesture: %s</string>
+    <!-- Settings Dialog -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_language">Language / 语言</string>
+    <string name="settings_lang_chinese">简体中文</string>
+    <string name="settings_lang_english">English</string>
+    <string name="settings_tts_speed">TTS Speed</string>
+    <string name="settings_tts_volume">TTS Volume</string>
+    <string name="settings_fps_limit">FPS Limit</string>
+    <string name="settings_close">Close</string>
+    <!-- TTS -->
+    <string name="tts_not_ready">TTS engine not ready</string>
+    <string name="tts_no_result">Please capture image first</string>
+    <!-- Permissions -->
+    <string name="perm_camera_rationale">Camera permission is required for visual assistance</string>
+    <string name="perm_denied">Permission denied</string>
+    <!-- AICore -->
+    <string name="aicore_check_title">AICore Check Result</string>
+    <string name="aicore_not_checked">AICore not detected</string>
+    <string name="aicore_available">AICore Available</string>
+    <string name="settings_voice_command">Voice Command</string>
+    <string name="settings_voice_enable">Enable Voice Control</string>
+    <string name="settings_ble_ring">BLE Ring</string>
+    <string name="settings_ring_scan">Scan Ring Device</string>
+    <string name="settings_ring_disconnect">Disconnect Ring</string>
 </resources>

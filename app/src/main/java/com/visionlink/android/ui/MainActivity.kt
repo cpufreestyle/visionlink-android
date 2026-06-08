@@ -1,13 +1,15 @@
 package com.visionlink.android.ui
 
 import android.Manifest
+import android.content.Context
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
-import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AlertDialog
+import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
@@ -16,6 +18,8 @@ import com.visionlink.android.camera.CameraManager
 import com.visionlink.android.databinding.ActivityMainBinding
 import com.visionlink.android.glasses.CXRGlassesManager
 import com.visionlink.android.audio.TTSManager
+import com.visionlink.android.audio.VoiceCommandManager
+import com.visionlink.android.bluetooth.BleRingManager
 import com.visionlink.android.utils.AICoreChecker
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.collectLatest
@@ -31,9 +35,13 @@ class MainActivity : AppCompatActivity() {
     private lateinit var aiManager: AIInferenceManager
     private lateinit var cameraManager: CameraManager
     private lateinit var ttsManager: TTSManager
+    private lateinit var voiceManager: VoiceCommandManager
+    private lateinit var ringManager: BleRingManager
     private lateinit var glassesManager: CXRGlassesManager
+    private var isVoiceEnabled = false
 
     private var currentMode = 1
+    private var isEnglish = false
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var isDestroyed = false
     private var isContinuousMode = false
@@ -62,6 +70,8 @@ class MainActivity : AppCompatActivity() {
             }
         }
         glassesManager = CXRGlassesManager(this)
+        voiceManager = VoiceCommandManager(this) { command -> handleVoiceCommand(command) }
+        ringManager = BleRingManager(this) { event -> handleRingEvent(event) }
         Log.d(TAG, "All managers initialized")
     }
 
@@ -96,6 +106,7 @@ class MainActivity : AppCompatActivity() {
 
                 val engineText = when (state.engine) {
                     AIInferenceManager.InferenceEngine.AICORE    -> "AICore (Gemini Nano)"
+                    AIInferenceManager.InferenceEngine.EDGE     -> "Edge (Gemma 4)"
                     AIInferenceManager.InferenceEngine.LITERT_LM  -> "LiteRT-LM (Gemma 4 E2B)"
                     AIInferenceManager.InferenceEngine.CLOUD     -> "Cloud (API)"
                     AIInferenceManager.InferenceEngine.NONE      -> "Not selected"
@@ -311,7 +322,149 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun openSettings() {
-        Toast.makeText(this, "Settings - Coming soon", Toast.LENGTH_SHORT).show()
+        val prefs = getSharedPreferences("visionlink", Context.MODE_PRIVATE)
+        isEnglish = prefs.getBoolean("isEnglish", false)
+        isVoiceEnabled = prefs.getBoolean("isVoiceEnabled", false)
+
+        val items = arrayOf(
+            getString(com.visionlink.android.R.string.settings_lang_chinese) + " / " + getString(com.visionlink.android.R.string.settings_lang_english),
+            getString(com.visionlink.android.R.string.settings_voice_enable) + if (isVoiceEnabled) " ✓" else "",
+            if (ringManager.isConnected()) getString(com.visionlink.android.R.string.settings_ring_disconnect)
+               else getString(com.visionlink.android.R.string.settings_ring_scan),
+            getString(com.visionlink.android.R.string.settings_close)
+        )
+
+        AlertDialog.Builder(this)
+            .setTitle(com.visionlink.android.R.string.settings_title)
+            .setItems(items) { _, which ->
+                when (which) {
+                    0 -> showLanguageDialog(prefs)
+                    1 -> toggleVoiceCommand(prefs)
+                    2 -> toggleRingConnection()
+                }
+            }
+            .show()
+    }
+
+    private fun showLanguageDialog(prefs: android.content.SharedPreferences) {
+        val langOptions = arrayOf(
+            getString(com.visionlink.android.R.string.settings_lang_chinese),
+            getString(com.visionlink.android.R.string.settings_lang_english)
+        )
+        val checked = if (isEnglish) 1 else 0
+
+        AlertDialog.Builder(this)
+            .setTitle(com.visionlink.android.R.string.settings_language)
+            .setSingleChoiceItems(langOptions, checked) { dialog, which ->
+                val newIsEnglish = (which == 1)
+                if (newIsEnglish != isEnglish) {
+                    isEnglish = newIsEnglish
+                    prefs.edit().putBoolean("isEnglish", isEnglish).apply()
+                    voiceManager.setEnglish(isEnglish)
+                    applyLanguage()
+                }
+                dialog.dismiss()
+            }
+            .setNegativeButton(com.visionlink.android.R.string.settings_close, null)
+            .show()
+    }
+
+    private fun toggleVoiceCommand(prefs: android.content.SharedPreferences) {
+        isVoiceEnabled = !isVoiceEnabled
+        prefs.edit().putBoolean("isVoiceEnabled", isVoiceEnabled).apply()
+
+        if (isVoiceEnabled) {
+            voiceManager.startListening()
+            binding.tvStatus.text = getString(com.visionlink.android.R.string.voice_listening)
+            speakSafely(getString(com.visionlink.android.R.string.voice_command_help))
+        } else {
+            voiceManager.stopListening()
+            binding.tvStatus.text = getString(com.visionlink.android.R.string.status_ready)
+        }
+        speakSafely(if (isVoiceEnabled) "Voice command enabled" else "Voice command disabled")
+    }
+
+    private fun toggleRingConnection() {
+        if (ringManager.isConnected()) {
+            ringManager.disconnect()
+            speakSafely(getString(com.visionlink.android.R.string.ring_disconnected))
+        } else {
+            if (ringManager.hasPermissions()) {
+                ringManager.startScan()
+                binding.tvStatus.text = getString(com.visionlink.android.R.string.ring_scanning)
+                speakSafely(getString(com.visionlink.android.R.string.ring_scanning))
+            } else {
+                speakSafely("Bluetooth permission required")
+                requestBluetoothPermissions()
+            }
+        }
+    }
+
+    private fun handleVoiceCommand(command: VoiceCommandManager.VoiceCommand) {
+        Log.d(TAG, "Voice command: $command")
+        speakSafely("收到命令")
+
+        when (command) {
+            VoiceCommandManager.VoiceCommand.CAPTURE_ANALYZE -> captureAndAnalyze()
+            VoiceCommandManager.VoiceCommand.MODE_OBSTACLE -> { setMode(1); speakSafely("障碍物模式") }
+            VoiceCommandManager.VoiceCommand.MODE_READ_TEXT -> { setMode(2); speakSafely("读文本模式") }
+            VoiceCommandManager.VoiceCommand.MODE_SCENE -> { setMode(3); speakSafely("场景描述模式") }
+            VoiceCommandManager.VoiceCommand.START_CONTINUOUS -> {
+                if (!isContinuousMode) { toggleContinuousMode() }
+            }
+            VoiceCommandManager.VoiceCommand.STOP_CONTINUOUS -> {
+                if (isContinuousMode) { toggleContinuousMode() }
+            }
+            VoiceCommandManager.VoiceCommand.INIT_AI -> { if (!aiManager.isInitialized()) initAI() }
+            VoiceCommandManager.VoiceCommand.HELP -> speakSafely(voiceManager.getHelpText())
+            VoiceCommandManager.VoiceCommand.UNKNOWN -> speakSafely("未知命令，请说帮助")
+        }
+    }
+
+    private fun handleRingEvent(event: BleRingManager.RingEvent) {
+        Log.d(TAG, "Ring event: $event")
+
+        when (event) {
+            BleRingManager.RingEvent.DEVICE_FOUND -> {
+                val name = ringManager.getDeviceName() ?: "ring"
+                binding.tvStatus.text = getString(com.visionlink.android.R.string.ring_found, name)
+                speakSafely(getString(com.visionlink.android.R.string.ring_found, name))
+            }
+            BleRingManager.RingEvent.DEVICE_CONNECTED -> {
+                speakSafely(getString(com.visionlink.android.R.string.ring_connected))
+            }
+            BleRingManager.RingEvent.DEVICE_DISCONNECTED -> {
+                speakSafely(getString(com.visionlink.android.R.string.ring_disconnected))
+            }
+            BleRingManager.RingEvent.TAP_DETECTED -> captureAndAnalyze()
+            BleRingManager.RingEvent.DOUBLE_TAP -> {
+                if (!aiManager.isInitialized()) initAI()
+                else speakSafely("AI already ready")
+            }
+            BleRingManager.RingEvent.LONG_PRESS -> toggleContinuousMode()
+            BleRingManager.RingEvent.SWIPE_UP -> setMode(minOf(currentMode + 1, 3))
+            BleRingManager.RingEvent.SWIPE_DOWN -> setMode(maxOf(currentMode - 1, 1))
+            else -> {}
+        }
+    }
+
+    private fun requestBluetoothPermissions() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            ActivityCompat.requestPermissions(this, arrayOf(
+                Manifest.permission.BLUETOOTH_SCAN,
+                Manifest.permission.BLUETOOTH_CONNECT
+            ), 1002)
+        }
+    }
+
+    private fun applyLanguage() {
+        val locale = if (isEnglish) java.util.Locale.ENGLISH else java.util.Locale.SIMPLIFIED_CHINESE
+        java.util.Locale.setDefault(locale)
+        val config = Configuration(resources.configuration)
+        config.setLocale(locale)
+        @Suppress("DEPRECATION")
+        resources.updateConfiguration(config, resources.displayMetrics)
+        recreate()
     }
 
     private fun setMode(mode: Int) {
@@ -345,7 +498,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun checkPermissions() {
-        val perms = mutableListOf(Manifest.permission.CAMERA)
+        val perms = mutableListOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             perms.add(Manifest.permission.POST_NOTIFICATIONS)
         }
@@ -353,8 +506,18 @@ class MainActivity : AppCompatActivity() {
         if (missing.isEmpty()) {
             Log.d(TAG, "Permissions granted")
             startCameraWithRetry()
+            initVoiceAndRing()
         } else {
             ActivityCompat.requestPermissions(this, missing.toTypedArray(), REQUEST_PERMISSIONS)
+        }
+    }
+
+    private fun initVoiceAndRing() {
+        val prefs = getSharedPreferences("visionlink", Context.MODE_PRIVATE)
+        isVoiceEnabled = prefs.getBoolean("isVoiceEnabled", false)
+        if (isVoiceEnabled) {
+            voiceManager.startListening()
+            binding.tvStatus.text = getString(com.visionlink.android.R.string.voice_listening)
         }
     }
 
@@ -388,8 +551,10 @@ class MainActivity : AppCompatActivity() {
         try { aiManager.release() }        catch (_: Exception) {}
         try { cameraManager.release() }     catch (_: Exception) {}
         try { ttsManager.release() }        catch (_: Exception) {}
+        try { voiceManager.release() }      catch (_: Exception) {}
+        try { ringManager.release() }        catch (_: Exception) {}
         try { glassesManager.release() }    catch (_: Exception) {}
-        try { scope.cancel() }             catch (_: Exception) {}
+        try { scope.cancel() }              catch (_: Exception) {}
         super.onDestroy()
     }
 }
