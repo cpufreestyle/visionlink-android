@@ -2,9 +2,9 @@
 <resources>
     <string name="app_name">VisionLink</string>
     <!-- Main UI -->
-    <string name="mode_obstacle">模式1</string>
-    <string name="mode_text">模式2</string>
-    <string name="mode_scene">模式3</string>
+    <string name="mode_obstacle">模式1: 障碍</string>
+    <string name="mode_text">模式2: 文字</string>
+    <string name="mode_scene">模式3: 场景</string>
     <string name="download_model">下载模型</string>
     <string name="init_ai">初始化</string>
     <string name="check_aicore">检测</string>
@@ -15,8 +15,8 @@
     <string name="exit">退出</string>
     <!-- Status -->
     <string name="status_ready">就绪</string>
-    <string name="status_initializing">初始化中…</string>
-    <string name="status_analyzing">分析中…</string>
+    <string name="status_initializing">初始化中...</string>
+    <string name="status_analyzing">分析中...</string>
     <string name="tap_init_ai">点击初始化AI</string>
     <string name="ai_ready">AI就绪</string>
     <string name="engine_aicore">引擎: AICore (Gemini Nano)</string>

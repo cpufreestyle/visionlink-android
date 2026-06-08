@@ -66,7 +66,7 @@ class MainActivity : AppCompatActivity() {
         ttsManager    = TTSManager(this) { status ->
             if (isDestroyed) return@TTSManager
             if (status == android.speech.tts.TextToSpeech.SUCCESS) {
-                binding.tvStatus.text = "TTS ready"
+                binding.tvStatus.text = getString(com.visionlink.android.R.string.status_ready)
             }
         }
         glassesManager = CXRGlassesManager(this)
@@ -462,7 +462,8 @@ class MainActivity : AppCompatActivity() {
         java.util.Locale.setDefault(locale)
         val config = Configuration(resources.configuration)
         config.setLocale(locale)
-        applyOverrideConfiguration(config)
+        @Suppress("DEPRECATION")
+        resources.updateConfiguration(config, resources.displayMetrics)
         recreate()
     }
 
@@ -480,10 +481,10 @@ class MainActivity : AppCompatActivity() {
         currentMode = mode
         updateModeUI()
         val modeName = when (mode) {
-            1 -> "Obstacle Avoidance"
-            2 -> "Text Reading"
-            3 -> "Scene Description"
-            else -> "Unknown"
+            1 -> if (isEnglish) "Obstacle Avoidance" else "障碍物检测"
+            2 -> if (isEnglish) "Text Reading" else "文字识别"
+            3 -> if (isEnglish) "Scene Description" else "场景描述"
+            else -> if (isEnglish) "Unknown" else "未知"
         }
         speakSafely("Mode: $modeName")
     }
@@ -531,17 +532,20 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startCameraWithRetry(retry: Int = 0) {
+        if (isDestroyed || isFinishing) return
         scope.launch {
             try {
                 cameraManager.startCamera()
-                binding.tvStatus.text = "Camera ready"
+                if (!isDestroyed) {
+                    binding.tvStatus.text = getString(com.visionlink.android.R.string.status_ready)
+                }
             } catch (e: Exception) {
-                Log.e(TAG, "Camera failed: ${e.message}")
-                if (retry < 3) {
+                Log.e(TAG, "Camera failed: ${e.message}", e)
+                if (retry < 3 && !isDestroyed) {
                     delay(1000)
                     startCameraWithRetry(retry + 1)
-                } else {
-                    binding.tvStatus.text = "Camera failed"
+                } else if (!isDestroyed) {
+                    binding.tvStatus.text = "Camera failed: ${e.message}"
                 }
             }
         }
@@ -551,7 +555,15 @@ class MainActivity : AppCompatActivity() {
         super.onRequestPermissionsResult(code, perms, results)
         if (code == REQUEST_PERMISSIONS) {
             if (results.all { it == PackageManager.PERMISSION_GRANTED }) startCameraWithRetry()
-            else Toast.makeText(this, "Camera permission required", Toast.LENGTH_LONG).show()
+            else Toast.makeText(this, getString(com.visionlink.android.R.string.perm_camera_rationale), Toast.LENGTH_LONG).show()
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (::cameraManager.isInitialized && !isDestroyed) {
+            Log.d(TAG, "onResume: restarting camera")
+            startCameraWithRetry()
         }
     }
 

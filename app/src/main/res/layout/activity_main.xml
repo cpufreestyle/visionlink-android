@@ -47,7 +47,7 @@
             android:id="@+id/tvMode"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Mode 1: Obstacle"
+            android:text="@string/mode_obstacle"
             android:textColor="#00FF00"
             android:textSize="18sp"
             android:textStyle="bold" />
@@ -57,7 +57,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginStart="16dp"
-            android:text="Ready"
+            android:text="@string/status_ready"
             android:textColor="#FFFFFF"
             android:textSize="14sp" />
 
@@ -69,7 +69,7 @@
             android:layout_marginStart="16dp"
             android:layout_weight="1"
             android:gravity="end"
-            android:text="Tap Init AI"
+            android:text="@string/tap_init_ai"
             android:textColor="#FF9800"
             android:textSize="13sp" />
 
@@ -104,13 +104,12 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:padding="8dp"
-            android:text="Results shown here"
             android:textColor="#FFFFFF"
             android:textSize="14sp" />
 
     </ScrollView>
 
-    <!-- Bottom Control Bar (Scrollable) -->
+    <!-- Bottom Control Bar -->
     <HorizontalScrollView
         android:id="@+id/bottomControls"
         android:layout_width="0dp"
@@ -127,125 +126,55 @@
             android:orientation="horizontal"
             android:padding="8dp">
 
-            <!-- Mode 1: Obstacle -->
-            <Button
-                android:id="@+id/btnMode1"
-                style="@style/Widget.Material3.Button"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_margin="2dp"
-                android:backgroundTint="#FF0000"
-                android:text="Mode 1\nObstacle"
-                android:textColor="#FFFFFF"
-                android:textSize="12sp" />
+            <Button android:id="@+id/btnMode1" style="@style/Widget.Material3.Button"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_margin="2dp" android:backgroundTint="#FF0000"
+                android:text="@string/mode_obstacle" android:textColor="#FFFFFF" android:textSize="12sp" />
 
-            <!-- Mode 2: Text -->
-            <Button
-                android:id="@+id/btnMode2"
-                style="@style/Widget.Material3.Button"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_margin="2dp"
-                android:backgroundTint="#FFAA00"
-                android:text="Mode 2\nText"
-                android:textColor="#FFFFFF"
-                android:textSize="12sp" />
+            <Button android:id="@+id/btnMode2" style="@style/Widget.Material3.Button"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_margin="2dp" android:backgroundTint="#FFAA00"
+                android:text="@string/mode_text" android:textColor="#FFFFFF" android:textSize="12sp" />
 
-            <!-- Mode 3: Scene -->
-            <Button
-                android:id="@+id/btnMode3"
-                style="@style/Widget.Material3.Button"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_margin="2dp"
-                android:backgroundTint="#0000FF"
-                android:text="Mode 3\nScene"
-                android:textColor="#FFFFFF"
-                android:textSize="12sp" />
+            <Button android:id="@+id/btnMode3" style="@style/Widget.Material3.Button"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_margin="2dp" android:backgroundTint="#0000FF"
+                android:text="@string/mode_scene" android:textColor="#FFFFFF" android:textSize="12sp" />
 
-            <!-- Download Model -->
-            <Button
-                android:id="@+id/btnDownloadModel"
-                style="@style/Widget.Material3.Button"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_margin="2dp"
-                android:backgroundTint="#9C27B0"
-                android:text="Download\nModel"
-                android:textColor="#FFFFFF"
-                android:textSize="12sp" />
+            <Button android:id="@+id/btnDownloadModel" style="@style/Widget.Material3.Button"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_margin="2dp" android:backgroundTint="#9C27B0"
+                android:text="@string/download_model" android:textColor="#FFFFFF" android:textSize="12sp" />
 
-            <!-- Init AI -->
-            <Button
-                android:id="@+id/btnInitAI"
-                style="@style/Widget.Material3.Button"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_margin="2dp"
-                android:backgroundTint="#FF9800"
-                android:text="Init AI"
-                android:textColor="#FFFFFF"
-                android:textSize="12sp" />
+            <Button android:id="@+id/btnInitAI" style="@style/Widget.Material3.Button"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_margin="2dp" android:backgroundTint="#FF9800"
+                android:text="@string/init_ai" android:textColor="#FFFFFF" android:textSize="12sp" />
 
-            <!-- Check AICore (v4.1 新增) -->
-            <Button
-                android:id="@+id/btnCheckAICore"
-                style="@style/Widget.Material3.Button"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_margin="2dp"
-                android:backgroundTint="#9C27B0"
-                android:text="Check\nAICore"
-                android:textColor="#FFFFFF"
-                android:textSize="12sp" />
+            <Button android:id="@+id/btnCheckAICore" style="@style/Widget.Material3.Button"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_margin="2dp" android:backgroundTint="#9C27B0"
+                android:text="@string/check_aicore" android:textColor="#FFFFFF" android:textSize="12sp" />
 
-            <!-- Continuous Mode -->
-            <Button
-                android:id="@+id/btnContinuous"
-                style="@style/Widget.Material3.Button"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_margin="2dp"
-                android:backgroundTint="#00AA00"
-                android:text="Start\nContinuous"
-                android:textColor="#FFFFFF"
-                android:textSize="12sp" />
+            <Button android:id="@+id/btnContinuous" style="@style/Widget.Material3.Button"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_margin="2dp" android:backgroundTint="#00AA00"
+                android:text="@string/start_continuous" android:textColor="#FFFFFF" android:textSize="12sp" />
 
-            <!-- Capture (Single Shot) -->
-            <Button
-                android:id="@+id/btnCapture"
-                style="@style/Widget.Material3.Button"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_margin="2dp"
-                android:backgroundTint="#2196F3"
-                android:text="Capture\nSingle"
-                android:textColor="#FFFFFF"
-                android:textSize="12sp" />
+            <Button android:id="@+id/btnCapture" style="@style/Widget.Material3.Button"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_margin="2dp" android:backgroundTint="#2196F3"
+                android:text="@string/capture_single" android:textColor="#FFFFFF" android:textSize="12sp" />
 
-            <!-- Settings -->
-            <Button
-                android:id="@+id/btnSettings"
-                style="@style/Widget.Material3.Button"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_margin="2dp"
-                android:backgroundTint="#607D8B"
-                android:text="Settings"
-                android:textColor="#FFFFFF"
-                android:textSize="12sp" />
+            <Button android:id="@+id/btnSettings" style="@style/Widget.Material3.Button"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_margin="2dp" android:backgroundTint="#607D8B"
+                android:text="@string/settings" android:textColor="#FFFFFF" android:textSize="12sp" />
 
-            <!-- Exit -->
-            <Button
-                android:id="@+id/btnExit"
-                style="@style/Widget.Material3.Button"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_margin="2dp"
-                android:backgroundTint="#666666"
-                android:text="Exit"
-                android:textColor="#FFFFFF"
-                android:textSize="12sp" />
+            <Button android:id="@+id/btnExit" style="@style/Widget.Material3.Button"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_margin="2dp" android:backgroundTint="#666666"
+                android:text="@string/exit" android:textColor="#FFFFFF" android:textSize="12sp" />
 
         </LinearLayout>
 
@@ -259,7 +188,7 @@
         android:layout_margin="8dp"
         android:background="#80000000"
         android:padding="4dp"
-        android:text="Glasses: N/A"
+        android:text="@string/glasses_na"
         android:textColor="#FF0000"
         android:textSize="12sp"
         app:layout_constraintEnd_toEndOf="parent"
