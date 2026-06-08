@@ -7,27 +7,27 @@ import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.app.AlertDialog
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.visionlink.android.R
 import com.visionlink.android.ai.AIInferenceManager
-import com.visionlink.android.audio.TTSManager
 import com.visionlink.android.camera.CameraManager
 import com.visionlink.android.databinding.ActivityMainBinding
 import com.visionlink.android.glasses.CXRGlassesManager
+import com.visionlink.android.utils.AICoreChecker
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.collectLatest
 
 /**
- * 主界面 Activity - v4.0 (Continuous Detection + S25 Ultra Optimized)
+ * 主界面 Activity - v4.1 (AICore Diagnostic + S25 Ultra Optimized)
  *
- * New in v4.0:
+ * New in v4.1:
+ * - AICore diagnostic button (for checking AICore availability)
  * - Continuous detection mode toggle
  * - Real-time FPS display
  * - S25 Ultra thermal monitoring
- * - Voice command support (placeholder)
- * - Settings button
  */
 class MainActivity : AppCompatActivity() {
 
@@ -52,7 +52,7 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        Log.d(TAG, "VisionLink Android v4.0 started")
+        Log.d(TAG, "VisionLink Android v4.1 started")
         Log.d(TAG, "Device: ${Build.MANUFACTURER} ${Build.MODEL} (Android ${Build.VERSION.RELEASE})")
 
         initManagers()
@@ -64,7 +64,7 @@ class MainActivity : AppCompatActivity() {
     // ========== 初始化 ==========
 
     private fun initManagers() {
-        aiManager    = AIInferenceManager(this)
+        aiManager     = AIInferenceManager(this)
         cameraManager = CameraManager(this, binding.previewView)
         ttsManager    = TTSManager(this) { status ->
             if (isDestroyed) return@TTSManager
@@ -106,8 +106,13 @@ class MainActivity : AppCompatActivity() {
         // 拍照识别（单次）
         binding.btnCapture.setOnClickListener { captureAndAnalyze() }
 
+        // AICore 检测按钮 (v4.1 新增)
+        binding.btnCheckAICore?.setOnClickListener {
+            runAICoreDiagnostic()
+        }
+
         // 设置按钮
-        binding.btnSettings.setOnClickListener {
+        binding.btnSettings?.setOnClickListener {
             openSettings()
         }
 
@@ -151,7 +156,7 @@ class MainActivity : AppCompatActivity() {
                     binding.tvAiStatus.text = "$engineText ready"
                     binding.btnInitAI.text = "AI Ready"
                     binding.btnInitAI.isEnabled = false
-                    binding.tvResult.text = "AI model ready.\nTap Analyze to start."
+                    binding.tvResult.text = "AI model ready.\nTap Capture to analyze."
                     speakSafely("AI initialized with $engineText")
                 }
 
@@ -161,6 +166,70 @@ class MainActivity : AppCompatActivity() {
 
                 if (state.modelDownloaded && !state.isInitialized) {
                     binding.btnInitAI.text = "Init AI (${state.modelSizeMb}MB)"
+                }
+            }
+        }
+    }
+
+    // ========== AICore 检测 (v4.1 新增) ==========
+
+    /**
+     * 运行 AICore 诊断
+     */
+    private fun runAICoreDiagnostic() {
+        Log.d(TAG, "Running AICore diagnostic...")
+
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            AlertDialog.Builder(this)
+                .setTitle("AICore Diagnostic")
+                .setMessage("AICore requires Android 14+ (API 34+)\n\nCurrent: Android ${Build.VERSION.SDK_INT}")
+                .setPositiveButton("OK", null)
+                .show()
+            return
+        }
+
+        // 显示进度对话框
+        val progressDialog = AlertDialog.Builder(this)
+            .setTitle("AICore Diagnostic")
+            .setMessage("Running diagnostic...\nPlease wait...")
+            .setCancelable(false)
+            .show()
+
+        // 在后台运行诊断
+        scope.launch {
+            try {
+                val result = AICoreChecker.runFullDiagnostic(this@MainActivity)
+                val summary = result.getSummary()
+
+                withContext(Dispatchers.Main) {
+                    progressDialog.dismiss()
+
+                    // 显示结果
+                    AlertDialog.Builder(this@MainActivity)
+                        .setTitle("AICore Diagnostic Result")
+                        .setMessage(summary)
+                        .setPositiveButton("OK", null)
+                        .show()
+
+                    // 同时输出到 Logcat
+                    Log.d("AICore-Diagnostic", summary)
+
+                    // 根据结果显示不同提示
+                    if (result.isAvailable) {
+                        speakSafely("AICore is available on this device")
+                    } else {
+                        speakSafely("AICore is not available. Will use Gemma 4 E2B instead.")
+                    }
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    progressDialog.dismiss()
+                    AlertDialog.Builder(this@MainActivity)
+                        .setTitle("Diagnostic Error")
+                        .setMessage("Error: ${e.message}")
+                        .setPositiveButton("OK", null)
+                        .show()
+                    Log.e(TAG, "Diagnostic failed: ${e.message}", e)
                 }
             }
         }
@@ -459,11 +528,11 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         isDestroyed = true
-        try { aiManager.release() }     catch (e: Exception) { Log.w(TAG, e.message) }
-        try { cameraManager.release() }   catch (e: Exception) { Log.w(TAG, e.message) }
-        try { ttsManager.release() }      catch (e: Exception) { Log.w(TAG, e.message) }
-        try { glassesManager.release() }  catch (e: Exception) { Log.w(TAG, e.message) }
-        try { scope.cancel() }           catch (e: Exception) { Log.w(TAG, e.message) }
+        try { aiManager.release() }        catch (e: Exception) { Log.w(TAG, e.message) }
+        try { cameraManager.release() }      catch (e: Exception) { Log.w(TAG, e.message) }
+        try { ttsManager.release() }        catch (e: Exception) { Log.w(TAG, e.message) }
+        try { glassesManager.release() }     catch (e: Exception) { Log.w(TAG, e.message) }
+        try { scope.cancel() }              catch (e: Exception) { Log.w(TAG, e.message) }
         super.onDestroy()
         Log.d(TAG, "All resources released")
     }
