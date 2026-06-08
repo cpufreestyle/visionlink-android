@@ -1,8 +1,10 @@
-// VisionLink Android - 项目设置
-// 对应 PC 版项目根目录配置
+// VisionLink Android - 项目设置 (with Alibaba Maven mirror)
 
 pluginManagement {
     repositories {
+        maven { url = uri("https://maven.aliyun.com/repository/gradle-plugin") }
+        maven { url = uri("https://maven.aliyun.com/repository/google") }
+        maven { url = uri("https://maven.aliyun.com/repository/public") }
         google()
         mavenCentral()
         gradlePluginPortal()
@@ -12,15 +14,14 @@ pluginManagement {
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
+        maven { url = uri("https://maven.aliyun.com/repository/google") }
+        maven { url = uri("https://maven.aliyun.com/repository/public") }
+        maven { url = uri("https://maven.aliyun.com/repository/central") }
         google()
         mavenCentral()
-        // LiteRT-LM 可能需要 Google Maven
         maven { url = uri("https://dl.google.com/dl/android/maven2/") }
     }
 }
 
-// 项目名称
 rootProject.name = "VisionLink-Android"
-
-// 包含 app 模块
 include(":app")

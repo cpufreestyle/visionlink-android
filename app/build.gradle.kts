@@ -42,7 +42,6 @@ android {
     
     buildFeatures {
         viewBinding = true
-        dataBinding = false // Disable to avoid annotation processor issues
     }
     
     packaging {
@@ -67,22 +66,22 @@ dependencies {
     implementation("androidx.camera:camera-camera2:1.4.0")
     implementation("androidx.camera:camera-lifecycle:1.4.0")
     implementation("androidx.camera:camera-view:1.4.0")
-    implementation("androidx.camera:camera-image-analysis:1.4.0")
+    // camera-image-analysis is included in camera-core via camera-camera2
     
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
     
     // AI Inference - LiteRT-LM (Gemma 4 E2B)
-    implementation("com.google.ai.edge.litert-lm:litert-lm:0.2.0")
+    // TODO: Uncomment when LiteRT-LM is available on Maven
+    // implementation("com.google.ai.edge.litert-lm:litert-lm:0.2.0")
     
     // AI Core (Gemini Nano) - Samsung S24/S25, Pixel 8+
     // TODO: Uncomment when AICore SDK is publicly available
     // implementation("com.google.ai.edge.aicore:aicore:0.1.0")
     // implementation("com.google.android.gms:play-services-base:18.4.0")
     
-    // TTS
-    implementation("android.speech.tts:TextToSpeech:1.0")
+    // TTS - Android TTS is a system API (android.speech.tts.TextToSpeech), no Maven dependency needed
     
     // Testing
     testImplementation("junit:junit:4.13.2")

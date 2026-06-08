@@ -141,22 +141,19 @@ class CameraManager(
     /**
      * Capture single frame
      */
-    suspend fun capture(onResult: (Bitmap?) -> Unit) = withContext(Dispatchers.IO) {
+    suspend fun capture(): Bitmap? = withContext(Dispatchers.IO) {
         Log.d(TAG, "Capturing single frame")
 
         if (cameraProvider == null) {
             Log.e(TAG, "Camera not initialized")
-            withContext(Dispatchers.Main) { onResult(null) }
-            return@withContext
+            return@withContext null
         }
 
-        // For single shot, we use the preview
         try {
-            val bitmap = previewView.bitmap
-            withContext(Dispatchers.Main) { onResult(bitmap) }
+            previewView.bitmap
         } catch (e: Exception) {
             Log.e(TAG, "Capture failed: ${e.message}", e)
-            withContext(Dispatchers.Main) { onResult(null) }
+            null
         }
     }
 
