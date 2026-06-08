@@ -16,21 +16,24 @@ import com.visionlink.android.glasses.CXRGlassesManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * 主界面 Activity
  * 
- * 功能映射 (对应 PC 版 main.py):
- * - 模式切换 (1/2/3) → 按钮
- * - 拍照识别 (空格) → btnCapture
- * - 语音播报 (speak) → TTSManager
- * - HUD 显示 → activity_main.xml
+ * 优化点 (v1.1):
+ * - 添加完整的权限请求处理
+ * - 改进生命周期管理 (避免 Activity 销毁后更新 UI)
+ * - 改进错误处理
+ * - 优化协程作用域
+ * - 添加摄像头启动重试
  */
 class MainActivity : AppCompatActivity() {
     
     companion object {
         private const val TAG = "MainActivity"
         private const val REQUEST_CAMERA_PERMISSION = 1001
+        private const val CAMERA_RETRY_DELAY_MS = 1000L
     }
     
     private lateinit var binding: ActivityMainBinding
@@ -39,17 +42,19 @@ class MainActivity : AppCompatActivity() {
     private lateinit var ttsManager: TTSManager
     private lateinit var glassesManager: CXRGlassesManager
     
-    private var currentMode = 1  // 1=避障, 2=文字, 3=场景
+    private var currentMode = 1
     private var isAiInitialized = false
+    private val scope = CoroutineScope(Dispatchers.Main + kotlinx.coroutines.Job())
+    
+    private var isDestroyed = false
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        // 设置布局
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
         
-        Log.d(TAG, "🚀 VisionLink Android 启动")
+        Log.d(TAG, "VisionLink Android started")
         
         // 初始化管理器
         initManagers()
@@ -73,15 +78,17 @@ class MainActivity : AppCompatActivity() {
         
         // 3. TTS 管理器
         ttsManager = TTSManager(this) { status ->
+            if (isDestroyed) return@TTSManager
+            
             if (status == android.speech.tts.TextToSpeech.SUCCESS) {
-                Log.d(TAG, "✅ TTS 初始化成功")
-                runOnUiThread {
-                    binding.tvStatus.text = "✅ TTS 已就绪"
+                Log.d(TAG, "TTS initialized successfully")
+                runOnUiThreadSafe {
+                    binding.tvStatus.text = "TTS ready"
                 }
             } else {
-                Log.e(TAG, "❌ TTS 初始化失败")
-                runOnUiThread {
-                    binding.tvStatus.text = "❌ TTS 初始化失败"
+                Log.e(TAG, "TTS initialization failed")
+                runOnUiThreadSafe {
+                    binding.tvStatus.text = "TTS failed"
                 }
             }
         }
@@ -89,7 +96,7 @@ class MainActivity : AppCompatActivity() {
         // 4. 眼镜管理器
         glassesManager = CXRGlassesManager(this)
         
-        Log.d(TAG, "✅ 所有管理器初始化完成")
+        Log.d(TAG, "All managers initialized")
     }
     
     /**
@@ -100,21 +107,21 @@ class MainActivity : AppCompatActivity() {
         binding.btnMode1.setOnClickListener {
             currentMode = 1
             updateModeUI()
-            speak("已切换到避障模式")
+            speakSafely("Switched to obstacle avoidance mode")
         }
         
         // 模式 2: 文字
         binding.btnMode2.setOnClickListener {
             currentMode = 2
             updateModeUI()
-            speak("已切换到文字阅读模式")
+            speakSafely("Switched to text reading mode")
         }
         
         // 模式 3: 场景
         binding.btnMode3.setOnClickListener {
             currentMode = 3
             updateModeUI()
-            speak("已切换到场景描述模式")
+            speakSafely("Switched to scene description mode")
         }
         
         // 拍照识别
@@ -134,35 +141,40 @@ class MainActivity : AppCompatActivity() {
         
         // 初始 UI
         updateModeUI()
-        updateAIStatus("⚠️ AI 模型未初始化")
+        updateAIStatus("AI model not initialized")
     }
     
     /**
      * 初始化 AI 模型
      */
     private fun initAIModel() {
-        Log.d(TAG, "🚀 开始初始化 AI 模型...")
-        updateAIStatus("⏳ 正在初始化 AI 模型...")
+        if (isAiInitialized) {
+            Log.w(TAG, "AI already initialized")
+            return
+        }
         
-        CoroutineScope(Dispatchers.Main).launch {
+        Log.d(TAG, "Initializing AI model...")
+        updateAIStatus("Initializing AI model...")
+        
+        scope.launch {
             try {
                 aiManager.initialize()
                 isAiInitialized = aiManager.isInitialized()
                 
                 if (isAiInitialized) {
-                    Log.d(TAG, "✅ AI 模型初始化成功")
-                    updateAIStatus("✅ AI 模型已就绪")
-                    speak("AI 模型初始化成功")
+                    Log.d(TAG, "AI model initialized successfully")
+                    updateAIStatus("AI model ready")
+                    speakSafely("AI model initialized successfully")
                 } else {
-                    Log.e(TAG, "❌ AI 模型初始化失败")
-                    updateAIStatus("❌ AI 模型初始化失败，请检查模型文件")
-                    speak("AI 模型初始化失败")
+                    Log.e(TAG, "AI model initialization failed")
+                    updateAIStatus("AI model initialization failed")
+                    speakSafely("AI model initialization failed")
                 }
                 
             } catch (e: Exception) {
-                Log.e(TAG, "❌ AI 初始化异常: ${e.message}")
-                updateAIStatus("❌ AI 初始化异常: ${e.message}")
-                speak("AI 初始化异常")
+                Log.e(TAG, "AI initialization exception: ${e.message}")
+                updateAIStatus("AI initialization error: ${e.message}")
+                speakSafely("AI initialization error")
             }
         }
     }
@@ -172,21 +184,21 @@ class MainActivity : AppCompatActivity() {
      */
     private fun updateModeUI() {
         val modeText = when (currentMode) {
-            1 -> "🟢 避障模式 (Obstacle)"
-            2 -> "🟡 文字阅读 (OCR)"
-            3 -> "🔵 场景描述 (Scene)"
-            else -> "未知模式"
+            1 -> "Obstacle Avoidance"
+            2 -> "Text Reading"
+            3 -> "Scene Description"
+            else -> "Unknown"
         }
         
         binding.tvMode.text = modeText
-        Log.d(TAG, "📺 模式切换: $modeText")
+        Log.d(TAG, "Mode switched to: $modeText")
     }
     
     /**
      * 更新 AI 状态显示
      */
     private fun updateAIStatus(status: String) {
-        runOnUiThread {
+        runOnUiThreadSafe {
             binding.tvAiStatus.text = status
         }
     }
@@ -196,96 +208,126 @@ class MainActivity : AppCompatActivity() {
      */
     private fun captureAndAnalyze() {
         if (!isAiInitialized) {
-            Log.w(TAG, "⚠️ AI 模型未初始化，无法分析")
-            speak("请先初始化 AI 模型")
+            Log.w(TAG, "AI model not initialized")
+            speakSafely("Please initialize AI model first")
             return
         }
         
-        Log.d(TAG, "📷 开始拍照识别...")
-        updateAIStatus("⏳ 正在拍照...")
+        Log.d(TAG, "Starting capture and analyze...")
+        updateAIStatus("Capturing...")
         
         cameraManager.capture { bitmap ->
+            if (isDestroyed) return@capture
+            
             if (bitmap == null) {
-                Log.e(TAG, "❌ 拍照失败")
-                speak("拍照失败，请重试")
-                updateAIStatus("❌ 拍照失败")
+                Log.e(TAG, "Capture failed - null bitmap")
+                updateAIStatus("Capture failed")
+                speakSafely("Capture failed")
                 return@capture
             }
             
-            Log.d(TAG, "📷 拍照成功，开始 AI 分析...")
-            updateAIStatus("🧠 AI 正在分析...")
+            Log.d(TAG, "Capture successful, starting AI inference...")
+            updateAIStatus("AI thinking...")
             
-            // AI 推理
-            CoroutineScope(Dispatchers.Main).launch {
+            // 执行 AI 推理
+            scope.launch {
                 try {
                     val result = aiManager.analyzeImage(bitmap, currentMode)
                     
-                    Log.d(TAG, "✅ AI 分析完成: $result")
+                    if (isDestroyed) return@launch
+                    
+                    Log.d(TAG, "AI inference result: $result")
+                    updateAIStatus("Analysis complete")
                     
                     // 显示结果
-                    binding.tvResult.text = result
+                    runOnUiThreadSafe {
+                        binding.tvResult.text = result
+                    }
                     
                     // 语音播报
-                    speak(result)
+                    speakSafely(result)
                     
-                    // 更新状态
-                    updateAIStatus("✅ 分析完成")
-                    
-                    // 发送到眼镜 (如果已连接)
+                    // 发送到眼镜
                     if (glassesManager.isConnected()) {
                         glassesManager.showResult(result)
                     }
                     
                 } catch (e: Exception) {
-                    Log.e(TAG, "❌ AI 分析失败: ${e.message}")
-                    speak("分析失败: ${e.message}")
-                    updateAIStatus("❌ 分析失败: ${e.message}")
+                    Log.e(TAG, "AI inference failed: ${e.message}")
+                    updateAIStatus("Analysis failed: ${e.message}")
+                    speakSafely("Analysis failed")
                 }
             }
         }
     }
     
     /**
-     * 语音播报
+     * 安全语音播报 (检查 TTS 状态)
      */
-    private fun speak(text: String) {
-        ttsManager.speak(text)
+    private fun speakSafely(text: String) {
+        try {
+            ttsManager.speak(text)
+        } catch (e: Exception) {
+            Log.w(TAG, "TTS speak failed: ${e.message}")
+        }
+    }
+    
+    /**
+     * 在 UI 线程执行 (安全检查 Activity 是否销毁)
+     */
+    private fun runOnUiThreadSafe(action: () -> Unit) {
+        if (isDestroyed || isFinishing) {
+            return
+        }
+        runOnUiThread {
+            if (!isDestroyed && !isFinishing) {
+                action()
+            }
+        }
     }
     
     /**
      * 检查权限
      */
     private fun checkPermissions() {
-        val permissions = mutableListOf<String>()
+        val permissions = arrayOf(
+            Manifest.permission.CAMERA,
+            Manifest.permission.RECORD_AUDIO
+        )
         
-        // 摄像头权限
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) 
-            != PackageManager.PERMISSION_GRANTED) {
-            permissions.add(Manifest.permission.CAMERA)
+        val missingPermissions = permissions.filter {
+            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
         }
         
-        // 麦克风权限
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) 
-            != PackageManager.PERMISSION_GRANTED) {
-            permissions.add(Manifest.permission.RECORD_AUDIO)
-        }
-        
-        // 存储权限 (Android 13 以下)
-        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.TIRAMISU) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) 
-                != PackageManager.PERMISSION_GRANTED) {
-                permissions.add(Manifest.permission.READ_EXTERNAL_STORAGE)
-                permissions.add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
-            }
-        }
-        
-        if (permissions.isNotEmpty()) {
-            Log.d(TAG, "🔐 请求权限: $permissions")
-            ActivityCompat.requestPermissions(this, permissions.toTypedArray(), REQUEST_CAMERA_PERMISSION)
+        if (missingPermissions.isEmpty()) {
+            Log.d(TAG, "All permissions granted")
+            startCameraWithRetry()
         } else {
-            Log.d(TAG, "✅ 所有权限已授予")
-            // 权限已授予，启动摄像头
-            startCamera()
+            Log.w(TAG, "Requesting permissions: $missingPermissions")
+            ActivityCompat.requestPermissions(this, missingPermissions.toTypedArray(), REQUEST_CAMERA_PERMISSION)
+        }
+    }
+    
+    /**
+     * 启动摄像头 (带重试)
+     */
+    private fun startCameraWithRetry(retryCount: Int = 0) {
+        try {
+            cameraManager.startCamera()
+            Log.d(TAG, "Camera started successfully")
+            updateAIStatus("Camera ready")
+        } catch (e: Exception) {
+            Log.e(TAG, "Camera start failed: ${e.message}")
+            if (retryCount < 3) {
+                Log.w(TAG, "Retrying camera start in ${CAMERA_RETRY_DELAY_MS}ms...")
+                scope.launch {
+                    kotlinx.coroutines.delay(CAMERA_RETRY_DELAY_MS)
+                    startCameraWithRetry(retryCount + 1)
+                }
+            } else {
+                Log.e(TAG, "Camera start failed after 3 retries")
+                updateAIStatus("Camera failed to start")
+            }
         }
     }
     
@@ -297,26 +339,13 @@ class MainActivity : AppCompatActivity() {
         
         if (requestCode == REQUEST_CAMERA_PERMISSION) {
             if (grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
-                Log.d(TAG, "✅ 权限授予成功")
-                startCamera()
+                Log.d(TAG, "Permissions granted")
+                startCameraWithRetry()
             } else {
-                Log.e(TAG, "❌ 权限被拒绝")
-                Toast.makeText(this, "需要摄像头和麦克风权限", Toast.LENGTH_LONG).show()
+                Log.e(TAG, "Permissions denied")
+                Toast.makeText(this, "Camera and microphone permissions required", Toast.LENGTH_LONG).show()
+                updateAIStatus("Permissions denied")
             }
-        }
-    }
-    
-    /**
-     * 启动摄像头
-     */
-    private fun startCamera() {
-        try {
-            cameraManager.startCamera()
-            Log.d(TAG, "✅ 摄像头启动成功")
-            updateAIStatus("✅ 摄像头已就绪")
-        } catch (e: Exception) {
-            Log.e(TAG, "❌ 摄像头启动失败: ${e.message}")
-            updateAIStatus("❌ 摄像头启动失败: ${e.message}")
         }
     }
     
@@ -324,37 +353,67 @@ class MainActivity : AppCompatActivity() {
      * 连接眼镜
      */
     private fun connectGlasses() {
-        Log.d(TAG, "🔗 开始连接眼镜...")
-        updateAIStatus("⏳ 正在连接眼镜...")
+        Log.d(TAG, "Connecting glasses...")
+        updateAIStatus("Connecting glasses...")
         
         glassesManager.connect { success ->
+            if (isDestroyed) return@connect
+            
             if (success) {
-                Log.d(TAG, "✅ 眼镜连接成功")
-                runOnUiThread {
-                    binding.tvGlassesStatus.text = "✅ 眼镜已连接"
+                Log.d(TAG, "Glasses connected successfully")
+                runOnUiThreadSafe {
+                    binding.tvGlassesStatus.text = "Glasses connected"
                     binding.tvGlassesStatus.setTextColor(ContextCompat.getColor(this, R.color.green))
                 }
-                speak("眼镜连接成功")
+                speakSafely("Glasses connected")
             } else {
-                Log.e(TAG, "❌ 眼镜连接失败")
-                runOnUiThread {
-                    binding.tvGlassesStatus.text = "❌ 眼镜未连接"
+                Log.e(TAG, "Glasses connection failed")
+                runOnUiThreadSafe {
+                    binding.tvGlassesStatus.text = "Glasses not connected"
                     binding.tvGlassesStatus.setTextColor(ContextCompat.getColor(this, R.color.red))
                 }
-                speak("眼镜连接失败")
+                speakSafely("Glasses connection failed")
             }
         }
     }
     
     override fun onDestroy() {
-        super.onDestroy()
+        isDestroyed = true
         
         // 释放资源
-        aiManager.release()
-        cameraManager.release()
-        ttsManager.release()
-        glassesManager.release()
+        try {
+            aiManager.release()
+        } catch (e: Exception) {
+            Log.w(TAG, "Error releasing AI manager: ${e.message}")
+        }
         
-        Log.d(TAG, "✅ 所有资源已释放")
+        try {
+            cameraManager.release()
+        } catch (e: Exception) {
+            Log.w(TAG, "Error releasing camera manager: ${e.message}")
+        }
+        
+        try {
+            ttsManager.release()
+        } catch (e: Exception) {
+            Log.w(TAG, "Error releasing TTS manager: ${e.message}")
+        }
+        
+        try {
+            glassesManager.release()
+        } catch (e: Exception) {
+            Log.w(TAG, "Error releasing glasses manager: ${e.message}")
+        }
+        
+        // 取消所有协程
+        try {
+            scope.cancel("Activity destroyed")
+        } catch (e: Exception) {
+            Log.w(TAG, "Error cancelling coroutines: ${e.message}")
+        }
+        
+        super.onDestroy()
+        
+        Log.d(TAG, "All resources released")
     }
 }
