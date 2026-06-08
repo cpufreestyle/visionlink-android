@@ -1,7 +1,3 @@
-// VisionLink Android - App build file v3.0
-// Target: Samsung Galaxy S24 series (Android 13+)
-// AI: AICore (Gemini Nano) / LiteRT-LM (Gemma 4 E2B) / Cloud fallback
-
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -13,99 +9,95 @@ android {
 
     defaultConfig {
         applicationId = "com.visionlink.android"
-        minSdk = 33  // Android 13+ required for CameraX + LiteRT-LM
+        minSdk = 33
         targetSdk = 35
-        versionCode = 3
-        versionName = "3.0.0"
+        versionCode = 4
+        versionName = "4.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-
-        ndk {
-            abiFilters.addAll(listOf("arm64-v8a", "armeabi-v7a"))
-        }
+        
+        // Enable AICore (requires Android 14+)
+        multiDexEnabled = true
     }
 
     buildTypes {
         release {
-            isMinifyEnabled = true
+            isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
         }
-        debug {
-            isDebuggable = true
-            isMinifyEnabled = false
-        }
     }
-
+    
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        isCoreLibraryDesugaringEnabled = true
     }
-
+    
     kotlinOptions {
         jvmTarget = "17"
     }
-
+    
     buildFeatures {
         viewBinding = true
+        dataBinding = false // Disable to avoid annotation processor issues
     }
-
+    
     packaging {
         resources {
-            excludes.addAll(listOf(
-                "META-INF/DEPENDENCIES",
-                "META-INF/NOTICE.txt",
-                "META-INF/LICENSE.txt"
-            ))
+            excludes += "/META-INF/DEPENDENCIES"
+            excludes += "/META-INF/LICENSE"
+            excludes += "/META-INF/NOTICE"
         }
     }
 }
 
 dependencies {
     // Android core
-    implementation("androidx.core:core-ktx:1.15.0")
+    implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("com.google.android.material:material:1.12.0")
-    implementation("androidx.constraintlayout:constraintlayout:2.2.0")
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.9.0")
-    implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.9.0")
-
-    // CameraX (visual input)
+    implementation("androidx.constraintlayout:constraintlayout:2.1.4")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.4")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.4")
+    
+    // CameraX
     implementation("androidx.camera:camera-camera2:1.4.0")
     implementation("androidx.camera:camera-lifecycle:1.4.0")
     implementation("androidx.camera:camera-view:1.4.0")
-
-    // ========== AI Inference Engines ==========
-
-    // 1. AICore (Gemini Nano) — Samsung Galaxy S24 (Android 14+)
-    //    Built into Google Play Services, no manual download needed
-    //    API: com.google.android.ai.aicore (Google AI Core services)
-    //    Models: Gemini Nano 1 (1.8B params), Nano 2 (3.25B params)
-    //    Docs: https://ai.google.dev/aicore
-    //    Note: Requires Google AI Core services installed on device
-    implementation("com.google.android.gms:play-services-base:18.4.0")
-
-    // 2. LiteRT-LM (Gemma 4 E2B) — Android 13+ (universal)
-    //    Official: https://developers.google.com/litert-lm
-    implementation("com.google.ai.edge.litert-lm:litert-lm:0.2.0")
-
-    // 3. LiteRT (optional, for vision models)
-    implementation("com.google.ai.edge.litert:litert:1.1.0")
-
-    // CXR-M SDK (Rokid glasses — place .aar in libs/)
-    // implementation(files("libs/cxr-m-sdk.aar"))
-
+    implementation("androidx.camera:camera-image-analysis:1.4.0")
+    
     // Coroutines
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
-
-    // JSON
-    implementation("com.google.code.gson:gson:2.11.0")
-
-    // Tests
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
+    
+    // AI Inference - LiteRT-LM (Gemma 4 E2B)
+    implementation("com.google.ai.edge.litert-lm:litert-lm:0.2.0")
+    
+    // AI Core (Gemini Nano) - Samsung S24/S25, Pixel 8+
+    // TODO: Uncomment when AICore SDK is publicly available
+    // implementation("com.google.ai.edge.aicore:aicore:0.1.0")
+    // implementation("com.google.android.gms:play-services-base:18.4.0")
+    
+    // TTS
+    implementation("android.speech.tts:TextToSpeech:1.0")
+    
+    // Testing
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
+    
+    // Multidex (for large apps)
+    implementation("androidx.multidex:multidex:2.0.1")
+    
+    // Core library desugaring (for Java 8+ API on older Android)
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }
+
+// AICore SDK Setup (Manual)
+// 1. Download AICore SDK from: https://developers.google.com/ai/core
+// 2. Copy .aar file to app/libs/
+// 3. Uncomment AICore dependency above
+// 4. Sync project and rebuild
