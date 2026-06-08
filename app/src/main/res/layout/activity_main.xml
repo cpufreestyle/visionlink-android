@@ -187,6 +187,18 @@
                 android:textColor="#FFFFFF"
                 android:textSize="12sp" />
 
+            <!-- Check AICore (v4.1 新增) -->
+            <Button
+                android:id="@+id/btnCheckAICore"
+                style="@style/Widget.Material3.Button"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_margin="2dp"
+                android:backgroundTint="#9C27B0"
+                android:text="Check\nAICore"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp" />
+
             <!-- Continuous Mode -->
             <Button
                 android:id="@+id/btnContinuous"
