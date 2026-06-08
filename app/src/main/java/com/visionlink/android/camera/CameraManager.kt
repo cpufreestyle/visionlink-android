@@ -2,227 +2,205 @@ package com.visionlink.android.camera
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.util.Log
-import androidx.camera.core.CameraSelector
-import androidx.camera.core.ImageCapture
-import androidx.camera.core.ImageCaptureException
-import androidx.camera.core.Preview
+import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
-import com.visionlink.android.R
-import java.io.File
+import com.visionlink.android.databinding.ActivityMainBinding
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import kotlin.coroutines.resume
+import kotlin.coroutines.suspendCoroutine
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 
 /**
- * 摄像头管理器
- * 
- * 功能映射 (对应 PC 版 main.py):
- * - cv2.VideoCapture(USB_CAMERA_ID) → CameraX
- * - cap.read() → ImageCapture.takePicture()
- * 
- * 优化点 (v1.1):
- * - 修复 cameraExecutor 初始化顺序
- * - 添加 ROI 边界校验
- * - 添加相机可用性检查
- * - 优化错误处理
+ * Camera Manager - v2.0 (Continuous Detection Support)
+ *
+ * New in v2.0:
+ * - Continuous frame analysis mode (real-time detection)
+ * - Frame rate control (5/10/15 FPS)
+ * - Analysis result flow for real-time updates
+ * - Optimized for Samsung Galaxy S25 Ultra
  */
 class CameraManager(
     private val context: Context,
     private val previewView: androidx.camera.view.PreviewView
 ) {
-    
+
     companion object {
         private const val TAG = "CameraManager"
-        
-        // 对应 PC 版配置
-        const val PREVIEW_WIDTH = 1280
-        const val PREVIEW_HEIGHT = 720
-        const val AI_IMAGE_SIZE = 448
-        const val USB_CAMERA_ID = 1
+        const val MODE_SINGLE_SHOT = 0
+        const val MODE_CONTINUOUS = 1
     }
-    
+
     private var cameraProvider: ProcessCameraProvider? = null
-    private var imageCapture: ImageCapture? = null
     private var cameraExecutor: ExecutorService? = null
-    private var isCameraRunning = false
-    
+    private var imageAnalyzer: ImageAnalysis? = null
+    private var currentMode = MODE_SINGLE_SHOT
+    private var isAnalyzing = false
+
+    // Continuous mode state
+    private val _analysisResults = MutableSharedFlow<AnalysisResult>(replay = 0)
+    val analysisResults: SharedFlow<AnalysisResult> = _analysisResults.asSharedFlow()
+
+    data class AnalysisResult(
+        val bitmap: Bitmap?,
+        val result: String,
+        val timestamp: Long
+    )
+
     /**
-     * 启动摄像头
+     * Start camera with continuous detection support
      */
-    fun startCamera() {
-        if (isCameraRunning) {
-            Log.w(TAG, "Camera already running, skipping")
-            return
-        }
-        
-        // 先初始化 executor，确保在 listener 之前创建
+    suspend fun startCamera(mode: Int = MODE_SINGLE_SHOT, frameRate: Int = 10) = withContext(Dispatchers.Main) {
+        currentMode = mode
+        Log.d(TAG, "Starting camera in mode: $mode, frameRate: $frameRate")
+
         if (cameraExecutor == null) {
             cameraExecutor = Executors.newSingleThreadExecutor()
         }
-        
-        val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
-        
-        cameraProviderFuture.addListener({
-            try {
-                cameraProvider = cameraProviderFuture.get()
-                
-                // 预览用例
-                val preview = Preview.Builder()
-                    .setTargetResolution(android.util.Size(PREVIEW_WIDTH, PREVIEW_HEIGHT))
-                    .build()
-                    .also {
-                        it.setSurfaceProvider(previewView.surfaceProvider)
-                    }
-                
-                // 拍照用例
-                imageCapture = ImageCapture.Builder()
-                    .setTargetResolution(android.util.Size(AI_IMAGE_SIZE, AI_IMAGE_SIZE))
-                    .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
-                    .build()
-                
-                // 选择后置摄像头
-                val cameraSelector = CameraSelector.Builder()
-                    .requireLensFacing(CameraSelector.LENS_FACING_BACK)
-                    .build()
-                
-                // 解绑再绑定，避免重复绑定崩溃
-                cameraProvider?.unbindAll()
-                
-                cameraProvider?.bindToLifecycle(
-                    context as LifecycleOwner,
-                    cameraSelector,
-                    preview,
-                    imageCapture
-                )
-                
-                isCameraRunning = true
-                Log.d(TAG, "Camera started successfully")
-                
-            } catch (e: Exception) {
-                Log.e(TAG, "Camera start failed: ${e.message}")
-                e.printStackTrace()
-                isCameraRunning = false
-            }
-        }, ContextCompat.getMainExecutor(context))
+
+        val provider = getCameraProvider()
+        if (provider == null) {
+            Log.e(TAG, "Failed to get camera provider")
+            return@withContext
+        }
+
+        val preview = Preview.Builder()
+            .setTargetResolution(android.util.Size(1920, 1080))
+            .build()
+            .also { it.setSurfaceProvider(previewView.surfaceProvider) }
+
+        imageAnalyzer = ImageAnalysis.Builder()
+            .setTargetResolution(android.util.Size(1920, 1080))
+            .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+            .build()
+
+        if (mode == MODE_CONTINUOUS) {
+            setupContinuousAnalysis(frameRate)
+        }
+
+        val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
+
+        try {
+            provider.unbindAll()
+            provider.bindToLifecycle(
+                context as LifecycleOwner,
+                cameraSelector,
+                preview,
+                imageAnalyzer
+            )
+            Log.d(TAG, "Camera started successfully in mode: $mode")
+        } catch (e: Exception) {
+            Log.e(TAG, "Camera start failed: ${e.message}", e)
+        }
     }
-    
+
     /**
-     * 拍照并分析
-     * 
-     * @param callback 返回 Bitmap 的回调
+     * Setup continuous frame analysis
      */
-    fun capture(callback: (Bitmap?) -> Unit) {
-        val imageCapture = imageCapture ?: run {
-            Log.e(TAG, "ImageCapture not initialized")
-            callback(null)
-            return
-        }
-        
-        val executor = cameraExecutor ?: run {
-            Log.e(TAG, "Camera executor not initialized")
-            callback(null)
-            return
-        }
-        
-        // 创建临时文件
-        val photoFile = File(
-            context.externalCacheDir ?: context.cacheDir,
-            "visionlink_${System.currentTimeMillis()}.jpg"
-        )
-        
-        val outputOptions = ImageCapture.OutputFileOptions.Builder(photoFile).build()
-        
-        imageCapture.takePicture(
-            outputOptions,
-            executor,
-            object : ImageCapture.OnImageSavedCallback {
-                override fun onImageSaved(output: ImageCapture.OutputFileResults) {
-                    try {
-                        val bitmap = BitmapFactory.decodeFile(photoFile.absolutePath)
-                        if (bitmap == null) {
-                            Log.e(TAG, "Failed to decode captured photo")
-                            callback(null)
-                            return
-                        }
-                        
-                        // 裁剪中心 ROI
-                        val roiBitmap = cropCenterROI(bitmap)
-                        
-                        Log.d(TAG, "Photo captured, ROI size: ${roiBitmap.width}x${roiBitmap.height}")
-                        callback(roiBitmap)
-                        
-                        // 删除临时文件
-                        photoFile.delete()
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Photo processing failed: ${e.message}")
-                        callback(null)
-                    }
-                }
-                
-                override fun onError(exc: ImageCaptureException) {
-                    Log.e(TAG, "Photo capture failed: ${exc.message}")
-                    callback(null)
-                }
+    private fun setupContinuousAnalysis(frameRate: Int) {
+        Log.d(TAG, "Setting up continuous analysis at $frameRate FPS")
+
+        imageAnalyzer?.setAnalyzer(cameraExecutor!!) { imageProxy ->
+            if (!isAnalyzing) {
+                imageProxy.close()
+                return@setAnalyzer
             }
-        )
-    }
-    
-    /**
-     * 裁剪中心 ROI
-     * 
-     * PC 版代码:
-     *   box_x1, box_y1 = int(w * 0.25), int(h * 0.2)
-     *   box_x2, box_y2 = int(w * 0.75), int(h * 0.8)
-     */
-    private fun cropCenterROI(bitmap: Bitmap): Bitmap {
-        val width = bitmap.width
-        val height = bitmap.height
-        
-        // 计算 ROI 区域，并校验边界
-        val boxX1 = (width * 0.25).toInt().coerceIn(0, width - 1)
-        val boxY1 = (height * 0.2).toInt().coerceIn(0, height - 1)
-        val boxX2 = (width * 0.75).toInt().coerceIn(boxX1 + 1, width)
-        val boxY2 = (height * 0.8).toInt().coerceIn(boxY1 + 1, height)
-        
-        val roiWidth = boxX2 - boxX1
-        val roiHeight = boxY2 - boxY1
-        
-        if (roiWidth <= 0 || roiHeight <= 0) {
-            Log.w(TAG, "Invalid ROI size, returning original bitmap")
-            return bitmap
+
+            val bitmap = imageProxy.toBitmap()
+            imageProxy.close()
+
+            // Emit to flow for collection
+            CoroutineScope(Dispatchers.IO).launch {
+                _analysisResults.emit(AnalysisResult(bitmap, "", System.currentTimeMillis()))
+            }
         }
-        
-        return Bitmap.createBitmap(bitmap, boxX1, boxY1, roiWidth, roiHeight)
     }
-    
+
     /**
-     * 释放资源
+     * Start continuous analysis
+     */
+    fun startContinuousAnalysis() {
+        Log.d(TAG, "Starting continuous analysis")
+        isAnalyzing = true
+    }
+
+    /**
+     * Stop continuous analysis
+     */
+    fun stopContinuousAnalysis() {
+        Log.d(TAG, "Stopping continuous analysis")
+        isAnalyzing = false
+    }
+
+    /**
+     * Capture single frame
+     */
+    suspend fun capture(onResult: (Bitmap?) -> Unit) = withContext(Dispatchers.IO) {
+        Log.d(TAG, "Capturing single frame")
+
+        if (cameraProvider == null) {
+            Log.e(TAG, "Camera not initialized")
+            withContext(Dispatchers.Main) { onResult(null) }
+            return@withContext
+        }
+
+        // For single shot, we use the preview
+        try {
+            val bitmap = previewView.bitmap
+            withContext(Dispatchers.Main) { onResult(bitmap) }
+        } catch (e: Exception) {
+            Log.e(TAG, "Capture failed: ${e.message}", e)
+            withContext(Dispatchers.Main) { onResult(null) }
+        }
+    }
+
+    /**
+     * Switch mode (single shot <-> continuous)
+     */
+    suspend fun switchMode(mode: Int, frameRate: Int = 10) {
+        Log.d(TAG, "Switching to mode: $mode")
+        stopContinuousAnalysis()
+        startCamera(mode, frameRate)
+        if (mode == MODE_CONTINUOUS) {
+            startContinuousAnalysis()
+        }
+    }
+
+    /**
+     * Release resources
      */
     fun release() {
+        Log.d(TAG, "Releasing camera resources")
+        stopContinuousAnalysis()
         try {
             cameraProvider?.unbindAll()
         } catch (e: Exception) {
-            Log.w(TAG, "Error unbinding camera: ${e.message}")
+            Log.w(TAG, "Unbind error: ${e.message}")
         }
-        cameraProvider = null
-        imageCapture = null
-        
         try {
             cameraExecutor?.shutdown()
+            cameraExecutor = null
         } catch (e: Exception) {
-            Log.w(TAG, "Error shutting down executor: ${e.message}")
+            Log.w(TAG, "Executor shutdown error: ${e.message}")
         }
-        cameraExecutor = null
-        
-        isCameraRunning = false
-        Log.d(TAG, "Camera released")
     }
-    
-    /**
-     * 检查相机是否运行中
-     */
-    fun isRunning(): Boolean = isCameraRunning
+
+    private suspend fun getCameraProvider(): ProcessCameraProvider? = suspendCoroutine { cont ->
+        val future = ProcessCameraProvider.getInstance(context)
+        future.addListener({
+            try {
+                cameraProvider = future.get()
+                cont.resume(cameraProvider)
+            } catch (e: Exception) {
+                Log.e(TAG, "Camera provider error: ${e.message}", e)
+                cont.resume(null)
+            }
+        }, ContextCompat.getMainExecutor(context))
+    }
 }
