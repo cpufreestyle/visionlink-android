@@ -20,14 +20,14 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.collectLatest
 
 /**
- * 主界面 Activity - v3.0
+ * 主界面 Activity - v4.0 (Continuous Detection + S25 Ultra Optimized)
  *
- * 新增功能 (v3.0 vs v2.0):
- * - 模型下载管理（支持 Gemma 4 E2B / Gemini Nano）
- * - 实时推理状态显示（StateFlow）
- * - 推理引擎自动检测（AICore / LiteRT-LM / Cloud）
- * - 下载进度条
- * - 三星设备特殊优化
+ * New in v4.0:
+ * - Continuous detection mode toggle
+ * - Real-time FPS display
+ * - S25 Ultra thermal monitoring
+ * - Voice command support (placeholder)
+ * - Settings button
  */
 class MainActivity : AppCompatActivity() {
 
@@ -45,13 +45,14 @@ class MainActivity : AppCompatActivity() {
     private var currentMode = 1
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var isDestroyed = false
+    private var isContinuousMode = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        Log.d(TAG, "VisionLink Android v3.0 started")
+        Log.d(TAG, "VisionLink Android v4.0 started")
         Log.d(TAG, "Device: ${Build.MANUFACTURER} ${Build.MODEL} (Android ${Build.VERSION.RELEASE})")
 
         initManagers()
@@ -97,8 +98,18 @@ class MainActivity : AppCompatActivity() {
             downloadModel()
         }
 
-        // 拍照识别
+        // 连续检测切换按钮
+        binding.btnContinuous.setOnClickListener {
+            toggleContinuousMode()
+        }
+
+        // 拍照识别（单次）
         binding.btnCapture.setOnClickListener { captureAndAnalyze() }
+
+        // 设置按钮
+        binding.btnSettings.setOnClickListener {
+            openSettings()
+        }
 
         // 退出
         binding.btnExit.setOnClickListener { finish() }
@@ -107,17 +118,18 @@ class MainActivity : AppCompatActivity() {
         updateModeUI()
         binding.tvAiStatus.text = "Tap Init AI to start"
         binding.tvAiStatus.visibility = android.view.View.VISIBLE
+        binding.tvFps.text = "FPS: 0"
+        binding.tvFps.visibility = android.view.View.VISIBLE
     }
 
     /**
-     * 监听 AI 状态变化（StateFlow）
+     * 监听 AI 状态变化
      */
     private fun observeAIState() {
         lifecycleScope.launch {
             aiManager.state.collectLatest { state ->
                 if (isDestroyed) return@collectLatest
 
-                // 引擎显示
                 val engineText = when (state.engine) {
                     AIInferenceManager.InferenceEngine.AICORE    -> "AICore (Gemini Nano)"
                     AIInferenceManager.InferenceEngine.LITERT_LM  -> "LiteRT-LM (Gemma 4 E2B)"
@@ -126,13 +138,15 @@ class MainActivity : AppCompatActivity() {
                 }
                 binding.tvAiStatus.text = "Engine: $engineText"
 
-                // 下载进度
-                if (state.downloadProgress in 1..99) {
-                    binding.tvAiStatus.text = "Downloading: ${state.downloadProgress}%"
-                    binding.tvAiStatus.visibility = android.view.View.VISIBLE
+                // FPS 显示
+                if (state.currentFps > 0) {
+                    binding.tvFps.text = "FPS: ${state.currentFps}"
                 }
 
-                // 初始化完成
+                if (state.downloadProgress in 1..99) {
+                    binding.tvAiStatus.text = "Downloading: ${state.downloadProgress}%"
+                }
+
                 if (state.isInitialized) {
                     binding.tvAiStatus.text = "$engineText ready"
                     binding.btnInitAI.text = "AI Ready"
@@ -141,13 +155,10 @@ class MainActivity : AppCompatActivity() {
                     speakSafely("AI initialized with $engineText")
                 }
 
-                // 初始化失败
                 if (state.initError != null) {
                     binding.tvAiStatus.text = "Error: ${state.initError}"
-                    binding.tvAiStatus.visibility = android.view.View.VISIBLE
                 }
 
-                // 模型下载状态
                 if (state.modelDownloaded && !state.isInitialized) {
                     binding.btnInitAI.text = "Init AI (${state.modelSizeMb}MB)"
                 }
@@ -155,11 +166,62 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // ========== 连续检测模式 ==========
+
+    private fun toggleContinuousMode() {
+        if (!aiManager.isInitialized()) {
+            Toast.makeText(this, "Please initialize AI first", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        isContinuousMode = !isContinuousMode
+
+        if (isContinuousMode) {
+            Log.d(TAG, "Enabling continuous detection mode")
+            binding.btnContinuous.text = "Stop\nContinuous"
+            binding.btnContinuous.setBackgroundColor(0xFFFF0000.toInt()) // Red
+            startContinuousDetection()
+        } else {
+            Log.d(TAG, "Disabling continuous detection mode")
+            binding.btnContinuous.text = "Start\nContinuous"
+            binding.btnContinuous.setBackgroundColor(0xFF00AA00.toInt()) // Green
+            stopContinuousDetection()
+        }
+    }
+
+    private fun startContinuousDetection() {
+        Log.d(TAG, "Starting continuous detection...")
+        binding.tvStatus.text = "Continuous mode active"
+
+        scope.launch {
+            try {
+                aiManager.startContinuousInference(
+                    onFrame = { bitmap ->
+                        // Frame captured
+                    },
+                    onResult = { result ->
+                        if (!isDestroyed) {
+                            runOnUiThreadSafe {
+                                binding.tvResult.text = result
+                            }
+                            speakSafely(result)
+                        }
+                    }
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "Continuous detection error: ${e.message}", e)
+            }
+        }
+    }
+
+    private fun stopContinuousDetection() {
+        Log.d(TAG, "Stopping continuous detection...")
+        binding.tvStatus.text = "Continuous mode stopped"
+        aiManager.stopContinuousInference()
+    }
+
     // ========== AI 操作 ==========
 
-    /**
-     * 初始化 AI 模型
-     */
     private fun initAI() {
         Log.d(TAG, "Initializing AI...")
         binding.btnInitAI.isEnabled = false
@@ -193,16 +255,12 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /**
-     * 下载 AI 模型
-     */
     private fun downloadModel() {
         if (aiManager.isModelDownloaded()) {
             Toast.makeText(this, "Model already downloaded", Toast.LENGTH_SHORT).show()
             return
         }
 
-        // 检测最优引擎
         val engine = when {
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE -> "AICore"
             else -> "Gemma"
@@ -260,9 +318,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /**
-     * 拍照并分析
-     */
     private fun captureAndAnalyze() {
         if (!aiManager.isInitialized()) {
             Toast.makeText(this, "Please initialize AI first", Toast.LENGTH_SHORT).show()
@@ -293,6 +348,7 @@ class MainActivity : AppCompatActivity() {
                     runOnUiThreadSafe {
                         binding.tvResult.text = result
                         binding.tvAiStatus.text = "${aiManager.getEngine().name} ready"
+                        binding.tvFps.text = "FPS: ${aiManager.getCurrentFps()}"
                     }
 
                     speakSafely(result)
@@ -307,6 +363,11 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
+    }
+
+    private fun openSettings() {
+        Toast.makeText(this, "Settings - Coming soon", Toast.LENGTH_SHORT).show()
+        // TODO: Open SettingsActivity
     }
 
     // ========== UI 辅助 ==========
