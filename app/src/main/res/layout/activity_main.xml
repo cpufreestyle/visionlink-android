@@ -61,7 +61,7 @@
             android:textColor="#FFFFFF"
             android:textSize="14sp" />
 
-        <!-- AI Status (right side) -->
+        <!-- AI Status -->
         <TextView
             android:id="@+id/tvAiStatus"
             android:layout_width="0dp"
@@ -72,6 +72,18 @@
             android:text="Tap Init AI"
             android:textColor="#FF9800"
             android:textSize="13sp" />
+
+        <!-- FPS Display -->
+        <TextView
+            android:id="@+id/tvFps"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:text="FPS: 0"
+            android:textColor="#00FF00"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:visibility="gone" />
 
     </LinearLayout>
 
@@ -98,113 +110,136 @@
 
     </ScrollView>
 
-    <!-- Bottom Control Bar -->
-    <LinearLayout
+    <!-- Bottom Control Bar (Scrollable) -->
+    <HorizontalScrollView
         android:id="@+id/bottomControls"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:background="#80000000"
-        android:gravity="center"
-        android:orientation="horizontal"
-        android:padding="8dp"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent">
 
-        <!-- Mode 1: Obstacle -->
-        <Button
-            android:id="@+id/btnMode1"
-            style="@style/Widget.Material3.Button"
-            android:layout_width="0dp"
+        <LinearLayout
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_margin="2dp"
-            android:layout_weight="1"
-            android:backgroundTint="#FF0000"
-            android:text="Mode 1\nObstacle"
-            android:textColor="#FFFFFF"
-            android:textSize="12sp" />
+            android:gravity="center"
+            android:orientation="horizontal"
+            android:padding="8dp">
 
-        <!-- Mode 2: Text -->
-        <Button
-            android:id="@+id/btnMode2"
-            style="@style/Widget.Material3.Button"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_margin="2dp"
-            android:layout_weight="1"
-            android:backgroundTint="#FFAA00"
-            android:text="Mode 2\nText"
-            android:textColor="#FFFFFF"
-            android:textSize="12sp" />
+            <!-- Mode 1: Obstacle -->
+            <Button
+                android:id="@+id/btnMode1"
+                style="@style/Widget.Material3.Button"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_margin="2dp"
+                android:backgroundTint="#FF0000"
+                android:text="Mode 1\nObstacle"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp" />
 
-        <!-- Mode 3: Scene -->
-        <Button
-            android:id="@+id/btnMode3"
-            style="@style/Widget.Material3.Button"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_margin="2dp"
-            android:layout_weight="1"
-            android:backgroundTint="#0000FF"
-            android:text="Mode 3\nScene"
-            android:textColor="#FFFFFF"
-            android:textSize="12sp" />
+            <!-- Mode 2: Text -->
+            <Button
+                android:id="@+id/btnMode2"
+                style="@style/Widget.Material3.Button"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_margin="2dp"
+                android:backgroundTint="#FFAA00"
+                android:text="Mode 2\nText"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp" />
 
-        <!-- Download Model -->
-        <Button
-            android:id="@+id/btnDownloadModel"
-            style="@style/Widget.Material3.Button"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_margin="2dp"
-            android:layout_weight="1"
-            android:backgroundTint="#9C27B0"
-            android:text="Download\nModel"
-            android:textColor="#FFFFFF"
-            android:textSize="12sp" />
+            <!-- Mode 3: Scene -->
+            <Button
+                android:id="@+id/btnMode3"
+                style="@style/Widget.Material3.Button"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_margin="2dp"
+                android:backgroundTint="#0000FF"
+                android:text="Mode 3\nScene"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp" />
 
-        <!-- Init AI -->
-        <Button
-            android:id="@+id/btnInitAI"
-            style="@style/Widget.Material3.Button"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_margin="2dp"
-            android:layout_weight="1"
-            android:backgroundTint="#FF9800"
-            android:text="Init AI"
-            android:textColor="#FFFFFF"
-            android:textSize="12sp" />
+            <!-- Download Model -->
+            <Button
+                android:id="@+id/btnDownloadModel"
+                style="@style/Widget.Material3.Button"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_margin="2dp"
+                android:backgroundTint="#9C27B0"
+                android:text="Download\nModel"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp" />
 
-        <!-- Analyze -->
-        <Button
-            android:id="@+id/btnCapture"
-            style="@style/Widget.Material3.Button"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_margin="2dp"
-            android:layout_weight="1"
-            android:backgroundTint="#00AA00"
-            android:text="Analyze"
-            android:textColor="#FFFFFF"
-            android:textSize="12sp" />
+            <!-- Init AI -->
+            <Button
+                android:id="@+id/btnInitAI"
+                style="@style/Widget.Material3.Button"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_margin="2dp"
+                android:backgroundTint="#FF9800"
+                android:text="Init AI"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp" />
 
-        <!-- Exit -->
-        <Button
-            android:id="@+id/btnExit"
-            style="@style/Widget.Material3.Button"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_margin="2dp"
-            android:layout_weight="1"
-            android:backgroundTint="#666666"
-            android:text="Exit"
-            android:textColor="#FFFFFF"
-            android:textSize="12sp" />
+            <!-- Continuous Mode -->
+            <Button
+                android:id="@+id/btnContinuous"
+                style="@style/Widget.Material3.Button"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_margin="2dp"
+                android:backgroundTint="#00AA00"
+                android:text="Start\nContinuous"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp" />
 
-    </LinearLayout>
+            <!-- Capture (Single Shot) -->
+            <Button
+                android:id="@+id/btnCapture"
+                style="@style/Widget.Material3.Button"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_margin="2dp"
+                android:backgroundTint="#2196F3"
+                android:text="Capture\nSingle"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp" />
 
-    <!-- Glasses Status (top right corner) -->
+            <!-- Settings -->
+            <Button
+                android:id="@+id/btnSettings"
+                style="@style/Widget.Material3.Button"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_margin="2dp"
+                android:backgroundTint="#607D8B"
+                android:text="Settings"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp" />
+
+            <!-- Exit -->
+            <Button
+                android:id="@+id/btnExit"
+                style="@style/Widget.Material3.Button"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_margin="2dp"
+                android:backgroundTint="#666666"
+                android:text="Exit"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp" />
+
+        </LinearLayout>
+
+    </HorizontalScrollView>
+
+    <!-- Glasses Status -->
     <TextView
         android:id="@+id/tvGlassesStatus"
         android:layout_width="wrap_content"
