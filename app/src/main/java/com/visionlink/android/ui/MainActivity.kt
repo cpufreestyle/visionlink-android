@@ -458,13 +458,22 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun applyLanguage() {
-        val locale = if (isEnglish) java.util.Locale.ENGLISH else java.util.Locale.SIMPLIFIED_CHINESE
+        val locale = if (isEnglish) java.util.Locale.ENGLISH else java.util.Locale("zh", "CN")
         java.util.Locale.setDefault(locale)
         val config = Configuration(resources.configuration)
         config.setLocale(locale)
-        @Suppress("DEPRECATION")
-        resources.updateConfiguration(config, resources.displayMetrics)
+        applyOverrideConfiguration(config)
         recreate()
+    }
+
+    override fun attachBaseContext(newBase: Context) {
+        val prefs = newBase.getSharedPreferences("visionlink", Context.MODE_PRIVATE)
+        val isEnglish = prefs.getBoolean("isEnglish", false)
+        val locale = if (isEnglish) java.util.Locale.ENGLISH else java.util.Locale("zh", "CN")
+        java.util.Locale.setDefault(locale)
+        val config = Configuration(newBase.resources.configuration)
+        config.setLocale(locale)
+        super.attachBaseContext(newBase.createConfigurationContext(config))
     }
 
     private fun setMode(mode: Int) {

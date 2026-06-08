@@ -2,15 +2,15 @@
 <resources>
     <string name="app_name">VisionLink</string>
     <!-- Main UI -->
-    <string name="mode_obstacle">模式1: 障碍物</string>
-    <string name="mode_text">模式2: 文字</string>
-    <string name="mode_scene">模式3: 场景</string>
-    <string name="download_model">下载\n模型</string>
-    <string name="init_ai">初始化AI</string>
-    <string name="check_aicore">检测\nAICore</string>
-    <string name="start_continuous">开始\n连续</string>
-    <string name="stop_continuous">停止\n连续</string>
-    <string name="capture_single">拍照\n分析</string>
+    <string name="mode_obstacle">模式1</string>
+    <string name="mode_text">模式2</string>
+    <string name="mode_scene">模式3</string>
+    <string name="download_model">下载模型</string>
+    <string name="init_ai">初始化</string>
+    <string name="check_aicore">检测</string>
+    <string name="start_continuous">开始</string>
+    <string name="stop_continuous">停止</string>
+    <string name="capture_single">拍照</string>
     <string name="settings">设置</string>
     <string name="exit">退出</string>
     <!-- Status -->
