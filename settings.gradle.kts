@@ -17,6 +17,8 @@ dependencyResolutionManagement {
         maven { url = uri("https://maven.aliyun.com/repository/google") }
         maven { url = uri("https://maven.aliyun.com/repository/public") }
         maven { url = uri("https://maven.aliyun.com/repository/central") }
+        // Rokid CXR-L SDK Maven 仓库
+        maven { url = uri("https://maven.rokid.com/repository/maven-public/") }
         google()
         mavenCentral()
         maven { url = uri("https://dl.google.com/dl/android/maven2/") }

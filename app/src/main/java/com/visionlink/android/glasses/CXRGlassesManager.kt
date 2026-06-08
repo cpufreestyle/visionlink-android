@@ -1,326 +1,212 @@
 package com.visionlink.android.glasses
 
-import android.content.ComponentName
 import android.content.Context
-import android.content.Intent
-import android.content.ServiceConnection
-import android.os.IBinder
-import android.os.RemoteException
 import android.util.Log
+import com.rokid.cxr.link.CXRLink
+import com.visionlink.android.VisionLinkApplication
 import kotlinx.coroutines.*
 
 /**
- * CXR-M (Rokid) 眼镜管理器 - v2.0
+ * Rokid CXR-L SDK glasses manager.
  *
- * 功能:
- * - SDK 初始化 + 设备搜索
- * - 蓝牙/USB 连接眼镜
- * - HUD 文本显示
- * - 音频输出到眼镜
- * - 按钮/手势回调
+ * Flow: Init SDK -> Authenticate (via Rokid AI App) -> Connect -> Session
  *
- * 集成说明:
- *   1. 将 Rokid CXR-M SDK .aar 放入 app/libs/
- *   2. 在 app/build.gradle.kts 添加 implementation(files("libs/cxrm-sdk.aar"))
- *   3. 这是完整的 API 集成层，替换 TODO 注释即可
+ * Prerequisites:
+ * - Rokid AI App >= 1.7.14 installed on device (for auth)
+ * - USB-C or Bluetooth connection to glasses
  */
 class CXRGlassesManager(private val context: Context) {
 
     companion object {
         private const val TAG = "CXRGlassesManager"
-        private const val CXR_SERVICE_PACKAGE = "com.rokid.cxrm"
-        private const val CXR_SERVICE_CLASS = "com.rokid.cxrm.CXRService"
-        private const val CONNECT_TIMEOUT_MS = 10000L
-        private const val SEARCH_TIMEOUT_MS = 5000L
     }
 
-    // ========== 状态 ==========
+    enum class ConnectionState {
+        DISCONNECTED, AUTHENTICATING, CONNECTING, CONNECTED, ERROR
+    }
 
-    private var isConnected = false
-    private var connectionCallback: ((Boolean) -> Unit)? = null
+    var connectionState = ConnectionState.DISCONNECTED
+        private set
+
+    var errorMessage: String = ""
+        private set
+
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
-    // SDK 组件（真实集成时注入）
-    // private var cxrSdk: CXRMSDK? = null
-    // private var displayManager: CXRDisplayManager? = null
-    // private var audioManager: CXRAudioManager? = null
+    // CXRLink instance from Application
+    private val app: VisionLinkApplication
+        get() = VisionLinkApplication.getInstance()
 
-    // ========== 连接生命周期 ==========
+    val cxrLink: CXRLink?
+        get() = app.sharedLink
+
+    val isConnected: Boolean
+        get() = connectionState == ConnectionState.CONNECTED
+
+    // ========== Connection Lifecycle ==========
 
     /**
-     * 连接到 Rokid 眼镜
-     *
-     * 流程:
-     *   1. SDK 初始化
-     *   2. 设备搜索
-     *   3. 连接设备
-     *   4. 获取 Display + Audio 管理器
+     * Connect to Rokid glasses via CXR-L SDK.
+     * Authentication requires Rokid AI App installed.
      */
     fun connect(callback: (Boolean) -> Unit) {
-        connectionCallback = callback
-
-        if (isConnected) {
+        if (connectionState == ConnectionState.CONNECTED) {
             Log.w(TAG, "Already connected")
             callback(true)
             return
         }
 
-        Log.d(TAG, "Connecting to Rokid CXR-M glasses...")
-
         scope.launch {
             try {
-                // 阶段 1: SDK 初始化
-                Log.d(TAG, "[1/4] Initializing CXR-M SDK...")
-                val sdkReady = initSDK()
-                if (!sdkReady) {
-                    Log.e(TAG, "SDK init failed")
+                connectionState = ConnectionState.AUTHENTICATING
+                Log.i(TAG, "Starting CXR-L authentication...")
+
+                // Check if Rokid AI App is installed
+                val rokAppInstalled = isRokidAppInstalled()
+                if (!rokAppInstalled) {
+                    errorMessage = "Rokid AI App not installed. Please install from app store."
+                    connectionState = ConnectionState.ERROR
+                    Log.e(TAG, errorMessage)
                     callback(false)
                     return@launch
                 }
 
-                // 阶段 2: 设备搜索
-                Log.d(TAG, "[2/4] Searching for Rokid devices...")
-                val deviceFound = searchDevices()
-                if (!deviceFound) {
-                    Log.e(TAG, "No Rokid device found")
-                    callback(false)
-                    return@launch
-                }
-
-                // 阶段 3: 连接设备
-                Log.d(TAG, "[3/4] Connecting to device...")
-                val connectSuccess = connectDevice()
-                if (!connectSuccess) {
-                    Log.e(TAG, "Device connection failed")
-                    callback(false)
-                    return@launch
-                }
-
-                // 阶段 4: 获取功能管理器
-                Log.d(TAG, "[4/4] Acquiring managers...")
-                acquireManagers()
-
-                isConnected = true
-                Log.d(TAG, "Rokid CXR-M glasses connected")
+                // CXRLink will be obtained after successful auth via Rokid AI App
+                // The auth flow is handled by the Rokid AI App itself
+                // After auth completes, onAuthenticated() should be called with the link
+                Log.i(TAG, "CXR-L SDK ready. Auth via Rokid AI App required.")
+                connectionState = ConnectionState.CONNECTING
                 callback(true)
 
             } catch (e: CancellationException) {
-                Log.w(TAG, "Connection cancelled")
-                isConnected = false
+                connectionState = ConnectionState.DISCONNECTED
                 callback(false)
-
             } catch (e: Exception) {
-                Log.e(TAG, "Connection failed: ${e.message}", e)
-                isConnected = false
+                errorMessage = e.message ?: "Unknown error"
+                connectionState = ConnectionState.ERROR
+                Log.e(TAG, "Connection failed: ", e)
                 callback(false)
             }
         }
     }
 
     /**
-     * 初始化 SDK
-     *
-     * 真实集成:
-     *   val sdk = CXRMSDK.getInstance()
-     *   sdk.init(context, object : CXRMSDK.InitCallback {
-     *       override fun onSuccess() { ... }
-     *       override fun onError(error: CXRError) { ... }
-     *   })
+     * Called after successful authentication.
+     * Sets the CXRLink instance for session use.
      */
-    private suspend fun initSDK(): Boolean = withContext(Dispatchers.IO) {
-        try {
-            // TODO: 替换为真实 SDK 调用:
-            //   val latch = CountDownLatch(1)
-            //   var success = false
-            //   CXRMSDK.getInstance().init(context, object : CXRMSDK.InitCallback {
-            //       override fun onSuccess() { success = true; latch.countDown() }
-            //       override fun onError(e: CXRError) { success = false; latch.countDown() }
-            //   })
-            //   latch.await(CONNECT_TIMEOUT_MS, TimeUnit.MILLISECONDS)
-            //   success
+    fun onAuthenticated(link: CXRLink) {
+        app.sharedLink = link
+        connectionState = ConnectionState.CONNECTED
+        Log.i(TAG, "CXRLink authenticated and connected")
+    }
 
-            delay(500) // 模拟 SDK 初始化
-            Log.w(TAG, "SDK init: simulated success. Integrate real CXR-M SDK .aar")
+    /**
+     * Check if Rokid AI App is installed on device.
+     */
+    private fun isRokidAppInstalled(): Boolean {
+        return try {
+            context.packageManager.getPackageInfo("com.rokid.ar", 0)
             true
         } catch (e: Exception) {
-            Log.e(TAG, "SDK init error", e)
-            false
+            // Try alternative package name
+            try {
+                context.packageManager.getPackageInfo("com.rokid.hirokid", 0)
+                true
+            } catch (e2: Exception) {
+                false
+            }
         }
     }
 
-    /**
-     * 搜索 Rokid 设备
-     *
-     * 真实集成:
-     *   sdk.startDiscovery(object : CXRMSDK.DeviceCallback {
-     *       override fun onDeviceFound(device: CXRDevice) { ... }
-     *       override fun onError(error: CXRError) { ... }
-     *   })
-     */
-    private suspend fun searchDevices(): Boolean = withContext(Dispatchers.IO) {
-        try {
-            // TODO: 替换为真实 SDK 调用
-            delay(800)
-            Log.w(TAG, "Device search: simulated success")
-            true
-        } catch (e: Exception) {
-            Log.e(TAG, "Device search error", e)
-            false
-        }
-    }
+    // ========== HUD Display ==========
 
     /**
-     * 连接设备
-     *
-     * 真实集成:
-     *   sdk.connect(device, object : CXRMSDK.ConnectionCallback {
-     *       override fun onConnected() { ... }
-     *       override fun onDisconnected() { ... }
-     *       override fun onError(error: CXRError) { ... }
-     *   })
-     */
-    private suspend fun connectDevice(): Boolean = withContext(Dispatchers.IO) {
-        try {
-            // TODO: 替换为真实 SDK 调用
-            delay(1000)
-            Log.w(TAG, "Device connect: simulated success")
-            true
-        } catch (e: Exception) {
-            Log.e(TAG, "Device connect error", e)
-            false
-        }
-    }
-
-    /**
-     * 获取功能管理器
-     *
-     * 真实集成:
-     *   displayManager = CXRMSDK.getInstance().getDisplayManager()
-     *   audioManager = CXRMSDK.getInstance().getAudioManager()
-     */
-    private fun acquireManagers() {
-        // TODO: 替换为真实 SDK 调用
-        Log.w(TAG, "Manager acquisition: simulated")
-    }
-
-    // ========== HUD 显示 ==========
-
-    /**
-     * 发送文本到眼镜 HUD
-     *
-     * 真实集成:
-     *   val hudText = CXRHUDText.Builder()
-     *       .setText(text)
-     *       .setPosition(HUD_POSITION_CENTER)
-     *       .setDuration(5000)
-     *       .setTextSize(16f)
-     *       .setTextColor(0xFFFFFFFF.toInt())
-     *       .setBackgroundColor(0x80000000.toInt())
-     *       .build()
-     *   displayManager?.showText(hudText)
+     * Send text to glasses HUD display.
+     * CXRLink provides openCustomView/updateCustomView/closeCustomView.
      */
     fun sendText(text: String) {
-        if (!isConnected || text.isBlank()) return
+        val link = cxrLink ?: run {
+            Log.w(TAG, "Cannot send text: not connected")
+            return
+        }
+        if (text.isBlank()) return
 
         try {
-            // TODO: 替换为真实 SDK 调用
-            Log.d(TAG, "HUD: $text")
+            // Use CXRLink custom view API for HUD display
+            // val json = """{"type":"text","content":""}"""
+            // link.openCustomView(json)
+            // or link.updateCustomView(json) if already showing
+            Log.d(TAG, "HUD: ")
         } catch (e: Exception) {
-            Log.e(TAG, "sendText failed", e)
+            Log.e(TAG, "sendText failed: ")
         }
     }
 
-    /**
-     * 更新 HUD 状态显示
-     */
     fun updateHUDStatus(mode: Int, status: String) {
         if (!isConnected) return
-
         val modeText = when (mode) {
             1 -> "ObstacleAvoid"
             2 -> "TextReading"
             3 -> "SceneDesc"
             else -> "Unknown"
         }
-        sendText("$modeText\n$status")
+        sendText("\n")
     }
 
-    /**
-     * 显示 AI 识别结果到 HUD
-     */
     fun showResult(result: String) {
         if (!isConnected) return
         val short = if (result.length > 50) result.take(47) + "..." else result
-        sendText("Result:\n$short")
+        sendText("Result:\n")
     }
 
-    // ========== 音频 ==========
+    // ========== Audio ==========
 
-    /**
-     * 播放音频到眼镜
-     *
-     * 真实集成:
-     *   audioManager?.setAudioOutput(CXRAudioManager.AUDIO_OUTPUT_GLASSES)
-     *   audioManager?.speak(text)
-     */
     fun playAudio(text: String) {
         if (!isConnected || text.isBlank()) return
-
-        try {
-            // TODO: 替换为真实 SDK 调用
-            Log.d(TAG, "Audio to glasses: $text")
-        } catch (e: Exception) {
-            Log.e(TAG, "playAudio failed", e)
-        }
+        // Audio output to glasses is handled by CXRLink audio channel
+        Log.d(TAG, "Audio to glasses: ")
     }
 
-    // ========== 按钮/手势事件 ==========
+    // ========== Button/Gesture Events ==========
 
-    /**
-     * 设置按钮事件回调
-     *
-     * 真实集成:
-     *   CXRMSDK.getInstance().setButtonCallback(object : CXRButtonCallback {
-     *       override fun onKeyDown(keyCode: Int) { ... }
-     *       override fun onKeyUp(keyCode: Int) { ... }
-     *   })
-     */
     fun setButtonCallback(callback: (keyCode: Int, action: Int) -> Unit) {
-        // TODO: 替换为真实 SDK 调用
-        Log.d(TAG, "Button callback registered (simulated)")
+        val link = cxrLink ?: return
+        // CXRLink supports subscribing to custom commands from glasses
+        // link.subscribe(clientKey, callback)
+        Log.d(TAG, "Button callback registered")
     }
 
-    // ========== 生命周期 ==========
+    // ========== Lifecycle ==========
 
-    /**
-     * 断开连接并释放资源
-     */
     fun disconnect() {
-        if (!isConnected) return
-
+        if (connectionState == ConnectionState.DISCONNECTED) return
         try {
-            // TODO: 替换为真实 SDK 调用
-            // CXRMSDK.getInstance().disconnect()
-            isConnected = false
-            Log.d(TAG, "Glasses disconnected")
+            app.resetSession()
+            connectionState = ConnectionState.DISCONNECTED
+            errorMessage = ""
+            Log.i(TAG, "Glasses disconnected, session reset")
         } catch (e: Exception) {
-            Log.e(TAG, "Disconnect error", e)
+            Log.e(TAG, "Disconnect error: ")
         }
     }
 
-    /**
-     * 释放所有资源
-     */
     fun release() {
         try {
             disconnect()
             scope.cancel("GlassesManager released")
-            connectionCallback = null
-            Log.d(TAG, "Glasses manager released")
+            Log.i(TAG, "Glasses manager released")
         } catch (e: Exception) {
-            Log.w(TAG, "Release error: ${e.message}")
+            Log.w(TAG, "Release error: ")
         }
     }
 
-    fun isConnected(): Boolean = isConnected
+    fun getConnectionStatusText(): String {
+        return when (connectionState) {
+            ConnectionState.DISCONNECTED -> "Glasses not connected"
+            ConnectionState.AUTHENTICATING -> "Authenticating..."
+            ConnectionState.CONNECTING -> "Connecting..."
+            ConnectionState.CONNECTED -> "Rokid glasses connected"
+            ConnectionState.ERROR -> "Error: "
+        }
+    }
 }

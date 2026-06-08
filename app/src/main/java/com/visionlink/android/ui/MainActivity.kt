@@ -310,7 +310,7 @@ class MainActivity : AppCompatActivity() {
                 binding.tvFps.text = "FPS: ${aiManager.getCurrentFps()}"
                 speakSafely(result)
 
-                if (glassesManager.isConnected()) {
+                if (glassesManager.isConnected) {
                     glassesManager.showResult(result)
                 }
             } catch (e: Exception) {

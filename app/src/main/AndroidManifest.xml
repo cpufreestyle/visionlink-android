@@ -6,12 +6,12 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <!-- Microphone permission -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
-    <!-- Network permission -->
+    <!-- Network permission (required by CXR-L SDK) -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <!-- Storage permission for model files -->
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+    <!-- Storage permission for model files and CustomApp APK -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
         tools:ignore="ScopedStorage" />
     <!-- Keep screen on -->
@@ -25,6 +25,7 @@
     <uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
 
     <application
+        android:name=".VisionLinkApplication"
         android:allowBackup="true"
         android:icon="@android:drawable/ic_menu_view"
         android:label="VisionLink"
@@ -47,8 +48,6 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-
-        <!-- Services removed until implemented -->
 
     </application>
 

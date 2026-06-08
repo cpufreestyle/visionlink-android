@@ -94,3 +94,11 @@ temp/
 # 保留 gradle wrapper
 !gradle/wrapper/gradle-wrapper.jar
 !gradle/wrapper/gradle-wrapper.properties
+*.apk
+build/
+.gradle/
+local.properties
+sdk/rokid-app.js
+sdk/rokid-sdk-page.html
+sdk/rokid-sdk-record.json
+sdk/rokid-cxrm/
