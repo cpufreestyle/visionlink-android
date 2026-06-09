@@ -103,6 +103,7 @@ class MainActivity : AppCompatActivity() {
         binding.btnCheckAICore?.setOnClickListener { runAICoreDiagnostic() }
         binding.btnSettings?.setOnClickListener { openSettings() }
         binding.btnTestApi.setOnClickListener { testApi() }
+        binding.btnTestLm.setOnClickListener { testLmStudio() }
         binding.btnExit.setOnClickListener { finish() }
 
         updateModeUI()
@@ -123,6 +124,7 @@ class MainActivity : AppCompatActivity() {
                     AIInferenceManager.InferenceEngine.LITERT_LM  -> "LiteRT-LM (Gemma 4 E2B)"
                     AIInferenceManager.InferenceEngine.CLOUD     -> "Cloud (API)"
                     AIInferenceManager.InferenceEngine.MOONSHOT  -> "Moonshot API (Kimi)"
+                    AIInferenceManager.InferenceEngine.LM_STUDIO -> "LM Studio (Local)"
                     AIInferenceManager.InferenceEngine.NONE      -> "Not selected"
                 }
                 binding.tvAiStatus.text = "Engine: $engineText"
@@ -288,6 +290,41 @@ class MainActivity : AppCompatActivity() {
                     binding.btnTestApi.isEnabled = true
                     binding.tvResult.text = "API Test FAILED:\n${e.message}"
                     Toast.makeText(this@MainActivity, "API Test FAILED: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
+
+    private fun testLmStudio() {
+        binding.tvAiStatus.text = "Testing LM Studio..."
+        binding.tvResult.text = "Testing LM Studio at 172.16.20.242:1234..."
+        binding.btnTestLm.isEnabled = false
+
+        scope.launch {
+            try {
+                // 切换到 LM Studio 引擎
+                aiManager.setEngine(AIInferenceManager.InferenceEngine.LM_STUDIO)
+                
+                // 测试连接
+                val result = aiManager.testLmStudioConnection()
+                
+                runOnUiThread {
+                    binding.btnTestLm.isEnabled = true
+                    binding.tvResult.text = "LM Studio Test Result:\n$result"
+                    
+                    if (result.startsWith("SUCCESS") || result.startsWith("OK")) {
+                        Toast.makeText(this@MainActivity, "LM Studio Connected!", Toast.LENGTH_SHORT).show()
+                        speakSafely("LM Studio connected successfully")
+                    } else {
+                        Toast.makeText(this@MainActivity, result, Toast.LENGTH_LONG).show()
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "LM Studio test error: ${e.message}", e)
+                runOnUiThread {
+                    binding.btnTestLm.isEnabled = true
+                    binding.tvResult.text = "LM Studio Test FAILED:\n${e.message}"
+                    Toast.makeText(this@MainActivity, "LM Studio Test FAILED: ${e.message}", Toast.LENGTH_LONG).show()
                 }
             }
         }

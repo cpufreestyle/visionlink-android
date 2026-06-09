@@ -71,7 +71,7 @@ dependencies {
     // Rokid CXR-L SDK
     implementation("com.rokid.cxr:client-l:1.0.3")
 
-    // HTTP client for API calls
+    // HTTP client for API calls (also used for LM Studio connection)
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
     // Multidex

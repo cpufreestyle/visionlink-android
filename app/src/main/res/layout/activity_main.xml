@@ -179,6 +179,11 @@
                 android:layout_margin="2dp" android:backgroundTint="#880088"
                 android:text="Test API" android:textColor="#FFFFFF" android:textSize="12sp" />
 
+            <Button android:id="@+id/btnTestLm" style="@style/Widget.Material3.Button"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_margin="2dp" android:backgroundTint="#006600"
+                android:text="Test LM" android:textColor="#FFFFFF" android:textSize="12sp" />
+
             <Button android:id="@+id/btnExit" style="@style/Widget.Material3.Button"
                 android:layout_width="wrap_content" android:layout_height="wrap_content"
                 android:layout_margin="2dp" android:backgroundTint="#666666"

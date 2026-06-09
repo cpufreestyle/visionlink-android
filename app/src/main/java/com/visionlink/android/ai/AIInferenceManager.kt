@@ -42,7 +42,7 @@ class AIInferenceManager(private val context: Context) {
         private const val MIN_SDK = 33
     }
 
-    enum class InferenceEngine { NONE, AICORE, EDGE, LITERT_LM, CLOUD, MOONSHOT }
+    enum class InferenceEngine { NONE, AICORE, EDGE, LITERT_LM, CLOUD, MOONSHOT, LM_STUDIO }
     enum class InferenceMode { SINGLE_SHOT, CONTINUOUS }
 
     data class ManagerState(
@@ -139,6 +139,77 @@ class AIInferenceManager(private val context: Context) {
 
     // ========== Public API ==========
 
+    suspend fun testLmStudioConnection(): String = withContext(Dispatchers.IO) {
+        Log.d(TAG, "Testing LM Studio connection to $lmStudioUrl...")
+        
+        try {
+            val jsonBody = JSONObject().apply {
+                put("model", "local-model")
+                put("temperature", 0.1f)
+                put("max_tokens", 20)
+                put("messages", JSONArray().apply {
+                    put(JSONObject().apply {
+                        put("role", "user")
+                        put("content", "Reply with just the word 'OK'.")
+                    })
+                })
+            }
+            
+            val requestBody = jsonBody.toString()
+                .toRequestBody("application/json".toMediaType())
+            
+            val request = Request.Builder()
+                .url(lmStudioUrl)
+                .addHeader("Content-Type", "application/json")
+                .post(requestBody)
+                .build()
+            
+            Log.d(TAG, "Sending test request to LM Studio...")
+            val response = httpClient.newCall(request).execute()
+            val responseBody = response.body?.string()
+            
+            Log.d(TAG, "LM Studio response: ${response.code}")
+            
+            if (!response.isSuccessful) {
+                return@withContext "Error ${response.code}: ${response.message}\nBody: ${responseBody?.take(200)}"
+            }
+            
+            if (responseBody == null) {
+                return@withContext "Error: Empty response"
+            }
+            
+            val jsonResponse = JSONObject(responseBody)
+            if (jsonResponse.has("error")) {
+                val errorMsg = jsonResponse.getJSONObject("error").getString("message")
+                return@withContext "API Error: $errorMsg"
+            }
+            
+            val choices = jsonResponse.getJSONArray("choices")
+            if (choices.length() > 0) {
+                val content = choices.getJSONObject(0)
+                    .getJSONObject("message")
+                    .getString("content")
+                Log.d(TAG, "LM Studio test SUCCESS: $content")
+                return@withContext "SUCCESS: $content"
+            }
+            
+            return@withContext "Response parsing error"
+            
+        } catch (e: IOException) {
+            Log.e(TAG, "Network error: ${e.message}", e)
+            return@withContext "Network Error: ${e.message}\n请确保:\n1. 手机和电脑在同一网络\n2. LM Studio 已启动\n3. 防火墙允许端口 1234"
+        } catch (e: Exception) {
+            Log.e(TAG, "LM Studio test error: ${e.message}", e)
+            return@withContext "Error: ${e.message}"
+        }
+    }
+
+    fun setEngine(engine: InferenceEngine) {
+        currentEngine = engine
+        updateState { copy(engine = engine) }
+        Log.d(TAG, "Engine switched to: $engine")
+    }
+
     suspend fun initialize() = withContext(Dispatchers.IO) {
         Log.d(TAG, "Initializing AI Inference Manager with Moonshot API")
         currentEngine = InferenceEngine.MOONSHOT
@@ -162,7 +233,11 @@ class AIInferenceManager(private val context: Context) {
             val prompt = buildPrompt(mode)
             Log.d(TAG, "Analyzing image with prompt: ${prompt.take(50)}...")
 
-            val result = callMoonshotAPI(prompt, bitmap)
+            val result = when (currentEngine) {
+                InferenceEngine.MOONSHOT -> callMoonshotAPI(prompt, bitmap)
+                InferenceEngine.LM_STUDIO -> runLmStudioInference(prompt, bitmap)
+                else -> "Unsupported engine: $currentEngine"
+            }
 
             updateFps()
             Log.d(TAG, "Result: ${result.take(80)}")
@@ -291,7 +366,115 @@ class AIInferenceManager(private val context: Context) {
             return@withContext "重试次数已用尽"
         }
 
-    // ========== Continuous Mode (Stub for Compatibility) ==========
+    // ========== LM Studio Local Connection ==========
+
+    /**
+     * Connect to LM Studio running on PC (OpenAI-compatible API)
+     * User's LM Studio: 172.16.20.242:1234
+     */
+    private var lmStudioUrl: String = "http://172.16.20.242:1234/v1/chat/completions"
+    
+    fun setLmStudioUrl(url: String) {
+        lmStudioUrl = url
+        Log.d(TAG, "LM Studio URL set to: $url")
+    }
+    
+    private suspend fun runLmStudioInference(prompt: String, bitmap: Bitmap): String =
+        withContext(Dispatchers.IO) {
+            var retryCount = 0
+            val maxRetries = 2
+
+            while (retryCount <= maxRetries) {
+                try {
+                    val base64Image = bitmapToBase64(bitmap)
+                    if (base64Image.isEmpty()) {
+                        return@withContext "图像转换失败"
+                    }
+
+                    // LM Studio uses OpenAI-compatible API format
+                    val jsonBody = JSONObject().apply {
+                        put("model", "local-model") // LM Studio ignores this, uses loaded model
+                        put("temperature", TEMPERATURE)
+                        put("max_tokens", MAX_TOKENS)
+                        put("messages", JSONArray().apply {
+                            put(JSONObject().apply {
+                                put("role", "user")
+                                put("content", JSONArray().apply {
+                                    put(JSONObject().apply {
+                                        put("type", "text")
+                                        put("text", prompt)
+                                    })
+                                    // LM Studio with vision model supports image input
+                                    put(JSONObject().apply {
+                                        put("type", "image_url")
+                                        put("image_url", JSONObject().apply {
+                                            put("url", "data:image/jpeg;base64,$base64Image")
+                                        })
+                                    })
+                                })
+                            })
+                        })
+                    }
+
+                    val requestBody = jsonBody.toString()
+                        .toRequestBody("application/json".toMediaType())
+
+                    val request = Request.Builder()
+                        .url(lmStudioUrl)
+                        .addHeader("Content-Type", "application/json")
+                        .post(requestBody)
+                        .build()
+
+                    Log.d(TAG, "Calling LM Studio at $lmStudioUrl (attempt ${retryCount + 1})...")
+                    val response = httpClient.newCall(request).execute()
+                    val responseBody = response.body?.string()
+
+                    if (!response.isSuccessful || responseBody == null) {
+                        Log.e(TAG, "LM Studio call failed: ${response.code}, ${response.message}")
+                        if (retryCount < maxRetries) {
+                            retryCount++
+                            continue
+                        }
+                        return@withContext "LM Studio 错误 ${response.code}: ${response.message}"
+                    }
+
+                    val jsonResponse = JSONObject(responseBody)
+                    if (jsonResponse.has("error")) {
+                        val errorMsg = jsonResponse.getJSONObject("error").getString("message")
+                        Log.e(TAG, "LM Studio API error: $errorMsg")
+                        return@withContext "LM Studio 错误: $errorMsg"
+                    }
+
+                    val choices = jsonResponse.getJSONArray("choices")
+                    if (choices.length() > 0) {
+                        val content = choices.getJSONObject(0)
+                            .getJSONObject("message")
+                            .getString("content")
+                        Log.d(TAG, "LM Studio result: ${content.take(50)}")
+                        return@withContext content
+                    }
+
+                    return@withContext "LM Studio 返回格式错误"
+
+                } catch (e: IOException) {
+                    Log.e(TAG, "Network error: ${e.message}", e)
+                    if (retryCount < maxRetries) {
+                        retryCount++
+                        continue
+                    }
+                    return@withContext "网络错误: 无法连接到 LM Studio ($lmStudioUrl)\n请确保:\n1. 手机和电脑在同一网络\n2. LM Studio 已启动\n3. 防火墙允许端口 1234"
+                } catch (e: Exception) {
+                    Log.e(TAG, "LM Studio error: ${e.message}", e)
+                    if (retryCount < maxRetries) {
+                        retryCount++
+                        continue
+                    }
+                    return@withContext "LM Studio 错误: ${e.message}"
+                }
+            }
+
+            return@withContext "重试次数已用尽"
+        }
 
     suspend fun startContinuousInference(
         onFrame: suspend (Bitmap) -> Unit,
