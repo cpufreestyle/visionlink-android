@@ -88,16 +88,19 @@ class CXRGlassesManager(private val context: Context) {
                 val bondedDevices = bluetoothAdapter!!.bondedDevices
                 var glassesConnected = false
                 
+                Log.d(TAG, "Scanning ${bondedDevices.size} bonded Bluetooth devices:")
                 for (device in bondedDevices) {
-                    val deviceName = device.name?.lowercase() ?: ""
-                    if (deviceName.contains("rokid") || deviceName.contains("cxr") || deviceName.contains("暴龙")) {
-                        // Check if device is actually connected
-                        val isConnected = isDeviceConnected(device)
-                        if (isConnected) {
-                            Log.i(TAG, "Found connected Rokid device: ${device.name}")
-                            glassesConnected = true
-                            break
-                        }
+                    val deviceName = device.name ?: "Unknown"
+                    val isConnected = isDeviceConnected(device)
+                    Log.d(TAG, "  - $deviceName (${device.address}): connected=$isConnected")
+                    
+                    if (isConnected) {
+                        Log.i(TAG, "Found connected device: $deviceName")
+                        glassesConnected = true
+                        // Store device name for UI display
+                        connectionState = ConnectionState.CONNECTED
+                        callback(true)
+                        return@launch
                     }
                 }
 

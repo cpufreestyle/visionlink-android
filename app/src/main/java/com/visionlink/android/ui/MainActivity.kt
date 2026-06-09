@@ -331,13 +331,16 @@ class MainActivity : AppCompatActivity() {
                 if (isDestroyed) return@launch
 
                 if (bitmap == null) {
+                    Log.e("VisionLink", "Capture returned null bitmap!")
                     binding.tvAiStatus.text = getString(com.visionlink.android.R.string.status_capture_failed)
                     speakSafely(if (isEnglish) "Capture failed" else "拍摄失效")
                     return@launch
                 }
 
                 binding.tvAiStatus.text = getString(com.visionlink.android.R.string.status_analyzing)
+                Log.d("VisionLink", "Analyzing bitmap: ${bitmap.width}x${bitmap.height}")
                 val result = aiManager.analyzeImage(bitmap, currentMode)
+                Log.d("VisionLink", "Analysis result: $result")
                 if (isDestroyed) return@launch
 
                 binding.tvResult.text = result
