@@ -65,4 +65,16 @@
     <string name="settings_ble_ring">蓝牙指环</string>
     <string name="settings_ring_scan">扫描指环设备</string>
     <string name="settings_ring_disconnect">断开指环连接</string>
-</resources>
+
+    <string name="tap_init_ai_to_start">点击初始化AI启动</string>
+    <string name="status_continuous_active">连续模式已启动</string>
+    <string name="status_continuous_stopped">连续模式已停止</string>
+    <string name="status_init_ai">AI初始化中...</string>
+    <string name="status_downloading">模型下载中...</string>
+    <string name="status_capturing">拍摄中...</string>
+    <string name="status_capture_failed">拍摄失效</string>
+    <string name="status_analysis_failed">分析失效</string>
+    <string name="ai_model_ready">AI模型就绪。点击拍照分析。</string>
+    <string name="error_prefix">错误:</string>
+    <string name="mode_unknown">未知</string>
+    </resources>

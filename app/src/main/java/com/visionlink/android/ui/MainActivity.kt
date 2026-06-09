@@ -12,10 +12,13 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
 import com.visionlink.android.ai.AIInferenceManager
 import com.visionlink.android.camera.CameraManager
 import com.visionlink.android.databinding.ActivityMainBinding
+import com.visionlink.android.R
 import com.visionlink.android.glasses.CXRGlassesManager
 import com.visionlink.android.audio.TTSManager
 import com.visionlink.android.audio.VoiceCommandManager
@@ -53,6 +56,13 @@ class MainActivity : AppCompatActivity() {
 
         Log.d(TAG, "VisionLink Android v4.2 started")
         Log.d(TAG, "Device: ${Build.MANUFACTURER} ${Build.MODEL} (Android ${Build.VERSION.RELEASE})")
+
+        // Enable edge-to-edge, handle system bar insets
+        ViewCompat.setOnApplyWindowInsetsListener(binding.root) { v, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            binding.topStatusBar.setPadding(bars.left, bars.top, bars.right, 0)
+            insets
+        }
 
         initManagers()
         setupUI()
@@ -93,7 +103,7 @@ class MainActivity : AppCompatActivity() {
         binding.btnExit.setOnClickListener { finish() }
 
         updateModeUI()
-        binding.tvAiStatus.text = "Tap Init AI to start"
+        binding.tvAiStatus.text = getString(com.visionlink.android.R.string.tap_init_ai_to_start)
         binding.tvAiStatus.visibility = android.view.View.VISIBLE
         binding.tvFps.text = "FPS: 0"
         binding.tvFps.visibility = android.view.View.VISIBLE
@@ -120,7 +130,7 @@ class MainActivity : AppCompatActivity() {
                     binding.tvAiStatus.text = "$engineText ready"
                     binding.btnInitAI.text = "AI Ready"
                     binding.btnInitAI.isEnabled = false
-                    binding.tvResult.text = "AI model ready.\nTap Capture to analyze."
+                    binding.tvResult.text = getString(com.visionlink.android.R.string.ai_model_ready)
                     speakSafely("AI initialized with $engineText")
                 }
 
@@ -198,7 +208,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startContinuousDetection() {
-        binding.tvStatus.text = "Continuous mode active"
+        binding.tvStatus.text = getString(com.visionlink.android.R.string.status_continuous_active)
         scope.launch {
             try {
                 aiManager.startContinuousInference(
@@ -217,14 +227,14 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun stopContinuousDetection() {
-        binding.tvStatus.text = "Continuous mode stopped"
+        binding.tvStatus.text = getString(com.visionlink.android.R.string.status_continuous_stopped)
         aiManager.stopContinuousInference()
     }
 
     private fun initAI() {
         binding.btnInitAI.isEnabled = false
         binding.btnInitAI.text = "Initializing..."
-        binding.tvAiStatus.text = "Initializing AI..."
+        binding.tvAiStatus.text = getString(com.visionlink.android.R.string.status_init_ai)
         binding.tvAiStatus.visibility = android.view.View.VISIBLE
 
         scope.launch {
@@ -243,7 +253,7 @@ class MainActivity : AppCompatActivity() {
                 Log.e(TAG, "Init exception: ${e.message}", e)
                 binding.btnInitAI.isEnabled = true
                 binding.btnInitAI.text = "Retry Init"
-                binding.tvAiStatus.text = "Error: ${e.message}"
+                binding.tvAiStatus.text = getString(com.visionlink.android.R.string.error_prefix) + e.message
             }
         }
     }
@@ -255,7 +265,7 @@ class MainActivity : AppCompatActivity() {
         }
         binding.btnDownloadModel.isEnabled = false
         binding.btnDownloadModel.text = "Downloading..."
-        binding.tvAiStatus.text = "Downloading model..."
+        binding.tvAiStatus.text = getString(com.visionlink.android.R.string.status_downloading)
         binding.tvAiStatus.visibility = android.view.View.VISIBLE
 
         scope.launch {
@@ -287,7 +297,7 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, "Please initialize AI first", Toast.LENGTH_SHORT).show()
             return
         }
-        binding.tvAiStatus.text = "Capturing..."
+        binding.tvAiStatus.text = getString(com.visionlink.android.R.string.status_capturing)
         binding.tvAiStatus.visibility = android.view.View.VISIBLE
 
         scope.launch {
@@ -296,12 +306,12 @@ class MainActivity : AppCompatActivity() {
                 if (isDestroyed) return@launch
 
                 if (bitmap == null) {
-                    binding.tvAiStatus.text = "Capture failed"
+                    binding.tvAiStatus.text = getString(com.visionlink.android.R.string.status_capture_failed)
                     speakSafely("Capture failed")
                     return@launch
                 }
 
-                binding.tvAiStatus.text = "AI analyzing..."
+                binding.tvAiStatus.text = getString(com.visionlink.android.R.string.status_analyzing)
                 val result = aiManager.analyzeImage(bitmap, currentMode)
                 if (isDestroyed) return@launch
 
@@ -315,7 +325,7 @@ class MainActivity : AppCompatActivity() {
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Analysis failed: ${e.message}", e)
-                if (!isDestroyed) binding.tvAiStatus.text = "Analysis failed"
+                if (!isDestroyed) binding.tvAiStatus.text = getString(com.visionlink.android.R.string.status_analysis_failed)
                 speakSafely("Analysis failed")
             }
         }

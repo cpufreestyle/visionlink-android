@@ -65,4 +65,16 @@
     <string name="settings_ble_ring">BLE Ring</string>
     <string name="settings_ring_scan">Scan Ring Device</string>
     <string name="settings_ring_disconnect">Disconnect Ring</string>
-</resources>
+
+    <string name="tap_init_ai_to_start">Tap Init AI to start</string>
+    <string name="status_continuous_active">Continuous mode active</string>
+    <string name="status_continuous_stopped">Continuous mode stopped</string>
+    <string name="status_init_ai">Initializing AI...</string>
+    <string name="status_downloading">Downloading model...</string>
+    <string name="status_capturing">Capturing...</string>
+    <string name="status_capture_failed">Capture failed</string>
+    <string name="status_analysis_failed">Analysis failed</string>
+    <string name="ai_model_ready">AI model ready. Tap Capture to analyze.</string>
+    <string name="error_prefix">Error:</string>
+    <string name="mode_unknown">Unknown</string>
+    </resources>
