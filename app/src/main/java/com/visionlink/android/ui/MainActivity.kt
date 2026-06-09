@@ -296,16 +296,32 @@ class MainActivity : AppCompatActivity() {
 
     private fun captureAndAnalyze() {
         if (!aiManager.isInitialized()) {
-            Toast.makeText(this, if (isEnglish) "Please initialize AI first" else "\u8bf7\u5148\u521d\u59cb\u5316AI", Toast.LENGTH_SHORT).show()
-            speakSafely(if (isEnglish) "Please initialize AI first" else "\u8bf7\u5148\u521d\u59cb\u5316AI")
+            Toast.makeText(this, if (isEnglish) "Please initialize AI first" else "请先初始化AI", Toast.LENGTH_SHORT).show()
+            speakSafely(if (isEnglish) "Please initialize AI first" else "请先初始化AI")
             return
         }
         if (!cameraManager.isCameraStarted()) {
-            binding.tvAiStatus.text = if (isEnglish) "Camera not ready" else "\u76f8\u673a\u672a\u542f\u52a8"
-            speakSafely(if (isEnglish) "Camera not ready, restarting..." else "\u76f8\u673a\u672a\u542f\u52a8\uff0c\u6b63\u5728\u91cd\u542f")
-            scope.launch { cameraManager.startCamera() }
+            binding.tvAiStatus.text = if (isEnglish) "Camera not ready" else "相机未启动"
+            speakSafely(if (isEnglish) "Camera not ready, restarting..." else "相机未启动，正在重启")
+            scope.launch {
+                try {
+                    cameraManager.startCamera()
+                    delay(1500)
+                    if (!cameraManager.isCameraStarted()) {
+                        binding.tvAiStatus.text = if (isEnglish) "Camera restart failed" else "相机重启失败"
+                        return@launch
+                    }
+                    doCapture()
+                } catch (e: Exception) {
+                    binding.tvAiStatus.text = if (isEnglish) "Camera error" else "相机错误"
+                }
+            }
             return
         }
+        doCapture()
+    }
+
+    private fun doCapture() {
         binding.tvAiStatus.text = getString(com.visionlink.android.R.string.status_capturing)
         binding.tvAiStatus.visibility = android.view.View.VISIBLE
 
@@ -316,7 +332,7 @@ class MainActivity : AppCompatActivity() {
 
                 if (bitmap == null) {
                     binding.tvAiStatus.text = getString(com.visionlink.android.R.string.status_capture_failed)
-                    speakSafely(if (isEnglish) "Capture failed" else "\u62cd\u6444\u5931\u6548")
+                    speakSafely(if (isEnglish) "Capture failed" else "拍摄失效")
                     return@launch
                 }
 
@@ -328,14 +344,9 @@ class MainActivity : AppCompatActivity() {
                 binding.tvAiStatus.text = "${aiManager.getEngine().name} ready"
                 binding.tvFps.text = "FPS: ${aiManager.getCurrentFps()}"
                 speakSafely(result)
-
-                if (glassesManager.isConnected) {
-                    glassesManager.showResult(result)
-                }
             } catch (e: Exception) {
-                Log.e(TAG, "Analysis failed: ${e.message}", e)
-                if (!isDestroyed) binding.tvAiStatus.text = getString(com.visionlink.android.R.string.status_analysis_failed)
-                speakSafely(if (isEnglish) "Analysis failed" else "\u5206\u6790\u5931\u6548")
+                Log.e("VisionLink", "Capture/analysis error: ${e.message}", e)
+                binding.tvAiStatus.text = "Error: ${e.message}"
             }
         }
     }
