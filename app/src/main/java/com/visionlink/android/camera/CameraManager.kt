@@ -179,6 +179,7 @@ class CameraManager(
 
             override fun onError(exception: ImageCaptureException) {
                 Log.e(TAG, "Capture failed: ${exception.message}", exception)
+                Log.e(TAG, "Error cause: ${exception.cause?.message ?: "unknown"}")
                 cont.resume(null)
             }
         })
