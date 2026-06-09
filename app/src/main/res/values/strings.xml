@@ -74,6 +74,9 @@
     <string name="status_capturing">Capturing...</string>
     <string name="status_capture_failed">Capture failed</string>
     <string name="status_analysis_failed">Analysis failed</string>
+    <string name="api_test_success">API Test: SUCCESS\n%1$s</string>
+    <string name="api_test_failed">API Test: FAILED\n%1$s</string>
+    <string name="api_test_waiting">Testing API...</string>
     <string name="ai_model_ready">AI model ready. Tap Capture to analyze.</string>
     <string name="error_prefix">Error:</string>
     <string name="mode_unknown">Unknown</string>

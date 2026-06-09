@@ -102,6 +102,7 @@ class MainActivity : AppCompatActivity() {
         binding.btnCapture.setOnClickListener { captureAndAnalyze() }
         binding.btnCheckAICore?.setOnClickListener { runAICoreDiagnostic() }
         binding.btnSettings?.setOnClickListener { openSettings() }
+        binding.btnTestApi.setOnClickListener { testApi() }
         binding.btnExit.setOnClickListener { finish() }
 
         updateModeUI()
@@ -257,6 +258,37 @@ class MainActivity : AppCompatActivity() {
                 binding.btnInitAI.isEnabled = true
                 binding.btnInitAI.text = "Retry Init"
                 binding.tvAiStatus.text = getString(com.visionlink.android.R.string.error_prefix) + e.message
+            }
+        }
+    }
+
+    private fun testApi() {
+        binding.tvAiStatus.text = getString(com.visionlink.android.R.string.api_test_waiting)
+        binding.tvResult.text = "Testing API..."
+        binding.btnTestApi.isEnabled = false
+
+        scope.launch {
+            try {
+                // 测试纯文本请求
+                val result = aiManager.testApiConnection()
+                
+                runOnUiThread {
+                    binding.btnTestApi.isEnabled = true
+                    binding.tvResult.text = "API Test Result:\n$result"
+                    
+                    if (result.startsWith("Error") || result.startsWith("失败") || result.startsWith("错误")) {
+                        Toast.makeText(this@MainActivity, result, Toast.LENGTH_LONG).show()
+                    } else {
+                        Toast.makeText(this@MainActivity, "API Test SUCCESS", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "API test error: ${e.message}", e)
+                runOnUiThread {
+                    binding.btnTestApi.isEnabled = true
+                    binding.tvResult.text = "API Test FAILED:\n${e.message}"
+                    Toast.makeText(this@MainActivity, "API Test FAILED: ${e.message}", Toast.LENGTH_LONG).show()
+                }
             }
         }
     }

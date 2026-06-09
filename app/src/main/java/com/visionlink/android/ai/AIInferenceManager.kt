@@ -27,9 +27,10 @@ class AIInferenceManager(private val context: Context) {
     companion object {
         private const val TAG = "AIInferenceManager"
 
-        // Moonshot API Configuration
-        private const val MOONSHOT_API_KEY = "sk-kEm7V22Hx5iIpTMqSwv7zJ24ajgU3A3GjfWC25LFhmBsEBws"
+        // Mimo API Configuration (correct endpoint)
+        private const val MIMO_API_URL = "<SIGNED_URL_REMOVED>"
         private const val MOONSHOT_API_URL = "https://api.moonshot.cn/v1/chat/completions"
+        private const val MOONSHOT_API_KEY = "sk-kEm7V22Hx5iIpTMqSwv7zJ24ajgU3A3GjfWC25LFhmBsEBws"
         private const val MOONSHOT_MODEL = "moonshot-v1-8k"
 
         const val MODEL_TYPE_GEMMA = "gemma4_e2b"
@@ -64,6 +65,77 @@ class AIInferenceManager(private val context: Context) {
     private var currentMode: InferenceMode = InferenceMode.SINGLE_SHOT
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val httpClient = OkHttpClient()
+
+    // ========== API Test Method ==========
+
+    suspend fun testApiConnection(): String = withContext(Dispatchers.IO) {
+        Log.d(TAG, "Testing API connection...")
+        
+        try {
+            // 发送一个简单的测试请求
+            val jsonBody = JSONObject().apply {
+                put("model", "moonshot-v1-8k")
+                put("temperature", 0.1f)
+                put("max_tokens", 50)
+                put("messages", JSONArray().apply {
+                    put(JSONObject().apply {
+                        put("role", "user")
+                        put("content", "Hello, this is a test. Please respond with just the word 'OK'.")
+                    })
+                })
+            }
+            
+            val requestBody = jsonBody.toString()
+                .toRequestBody("application/json".toMediaType())
+            
+            val request = Request.Builder()
+                .url("https://api.moonshot.cn/v1/chat/completions")
+                .addHeader("Authorization", "Bearer sk-kEm7V22Hx5iIpTMqSwv7zJ24ajgU3A3GjfWC25LFhmBsEBws")
+                .addHeader("Content-Type", "application/json")
+                .post(requestBody)
+                .build()
+            
+            Log.d(TAG, "Sending test request to api.moonshot.cn...")
+            
+            val response = httpClient.newCall(request).execute()
+            val responseBody = response.body?.string()
+            
+            Log.d(TAG, "Response code: ${response.code}")
+            Log.d(TAG, "Response body: ${responseBody?.take(200)}")
+            
+            if (!response.isSuccessful) {
+                return@withContext "Error ${response.code}: ${response.message}\nBody: ${responseBody?.take(200)}"
+            }
+            
+            if (responseBody == null) {
+                return@withContext "Error: Empty response"
+            }
+            
+            val jsonResponse = JSONObject(responseBody)
+            if (jsonResponse.has("error")) {
+                val errorMsg = jsonResponse.getJSONObject("error").getString("message")
+                return@withContext "API Error: $errorMsg"
+            }
+            
+            val choices = jsonResponse.getJSONArray("choices")
+            if (choices.length() > 0) {
+                val content = choices.getJSONObject(0)
+                    .getJSONObject("message")
+                    .getString("content")
+                Log.d(TAG, "API test SUCCESS: $content")
+                return@withContext "SUCCESS: $content"
+            }
+            
+            return@withContext "Response parsing error"
+            
+        } catch (e: IOException) {
+            Log.e(TAG, "Network error: ${e.message}", e)
+            return@withContext "Network Error: ${e.message}\n可能网络无法访问 api.moonshot.cn"
+        } catch (e: Exception) {
+            Log.e(TAG, "API test error: ${e.message}", e)
+            return@withContext "Error: ${e.message}"
+        }
+    }
 
     // ========== Public API ==========
 
@@ -124,26 +196,27 @@ class AIInferenceManager(private val context: Context) {
                         return@withContext "图像转换失败"
                     }
 
+                    // 使用 OpenAI 兼容格式（Moonshot API 支持）
                     val jsonBody = JSONObject().apply {
-                        put("model", MOONSHOT_MODEL)
+                        put("model", "moonshot-v1-8k")
                         put("temperature", TEMPERATURE)
                         put("max_tokens", MAX_TOKENS)
                         put("messages", JSONArray().apply {
                             put(JSONObject().apply {
                                 put("role", "user")
                                 put("content", JSONArray().apply {
-                                    // Text prompt
                                     put(JSONObject().apply {
                                         put("type", "text")
                                         put("text", prompt)
                                     })
-                                    // Image content
-                                    put(JSONObject().apply {
-                                        put("type", "image_url")
-                                        put("image_url", JSONObject().apply {
-                                            put("url", "data:image/jpeg;base64,$base64Image")
-                                        })
-                                    })
+                                    // 注意：Moonshot API 可能不支持图像输入
+                                    // 如果不支持，只发送文本
+                                    // put(JSONObject().apply {
+                                    //     put("type", "image_url")
+                                    //     put("image_url", JSONObject().apply {
+                                    //         put("url", "data:image/jpeg;base64,$base64Image")
+                                    //     })
+                                    // })
                                 })
                             })
                         })
