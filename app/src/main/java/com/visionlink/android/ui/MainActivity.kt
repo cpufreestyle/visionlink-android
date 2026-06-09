@@ -600,6 +600,22 @@ class MainActivity : AppCompatActivity() {
             Log.d(TAG, "onResume: restarting camera")
             startCameraWithRetry()
         }
+        checkGlassesConnection()
+    }
+    
+    /**
+     * Check and update glasses connection status
+     */
+    private fun checkGlassesConnection() {
+        glassesManager.connect { connected ->
+            runOnUiThread {
+                binding.tvGlassesStatus.text = if (connected) {
+                    getString(com.visionlink.android.R.string.glasses_connected)
+                } else {
+                    getString(com.visionlink.android.R.string.glasses_disconnected)
+                }
+            }
+        }
     }
 
     override fun onDestroy() {
