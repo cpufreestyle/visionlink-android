@@ -38,6 +38,7 @@ class CameraManager(
     }
 
     private var cameraProvider: ProcessCameraProvider? = null
+    private var _cameraStarted = false
     private var cameraExecutor: ExecutorService? = null
     private var imageAnalyzer: ImageAnalysis? = null
     private var currentMode = MODE_SINGLE_SHOT
@@ -95,10 +96,14 @@ class CameraManager(
                 imageAnalyzer
             )
             Log.d(TAG, "Camera started successfully in mode: $mode")
+            _cameraStarted = true
         } catch (e: Exception) {
             Log.e(TAG, "Camera start failed: ${e.message}", e)
+            _cameraStarted = false
         }
     }
+
+    fun isCameraStarted(): Boolean = _cameraStarted
 
     /**
      * Setup continuous frame analysis

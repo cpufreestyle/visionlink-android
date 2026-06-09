@@ -205,4 +205,15 @@ class TTSManager(
         }
         return true
     }
+
+    /**
+     * Switch TTS language between Chinese and English
+     */
+    fun switchLanguage(isEnglish: Boolean) {
+        val locale = if (isEnglish) java.util.Locale.US else java.util.Locale("zh", "CN")
+        val result = tts?.setLanguage(locale)
+        if (result == android.speech.tts.TextToSpeech.LANG_MISSING_DATA || result == android.speech.tts.TextToSpeech.LANG_NOT_SUPPORTED) {
+            android.util.Log.w(TAG, "Language not supported: $locale")
+        }
+    }
 }

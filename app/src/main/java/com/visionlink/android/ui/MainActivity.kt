@@ -81,6 +81,8 @@ class MainActivity : AppCompatActivity() {
         }
         glassesManager = CXRGlassesManager(this)
         voiceManager = VoiceCommandManager(this) { command -> handleVoiceCommand(command) }
+        voiceManager.setEnglish(isEnglish)
+        ttsManager.switchLanguage(isEnglish)
         ringManager = BleRingManager(this) { event -> handleRingEvent(event) }
         Log.d(TAG, "All managers initialized")
     }
@@ -92,7 +94,7 @@ class MainActivity : AppCompatActivity() {
 
         binding.btnInitAI.setOnClickListener {
             if (!aiManager.isInitialized()) initAI()
-            else Toast.makeText(this, "AI already initialized", Toast.LENGTH_SHORT).show()
+            else Toast.makeText(this, if (isEnglish) "AI already initialized" else "AI\u5df2\u521d\u59cb\u5316", Toast.LENGTH_SHORT).show()
         }
 
         binding.btnDownloadModel.setOnClickListener { downloadModel() }
@@ -124,10 +126,10 @@ class MainActivity : AppCompatActivity() {
                 binding.tvAiStatus.text = "Engine: $engineText"
 
                 if (state.currentFps > 0) binding.tvFps.text = "FPS: ${state.currentFps}"
-                if (state.downloadProgress in 1..99) binding.tvAiStatus.text = "Downloading: ${state.downloadProgress}%"
+                if (state.downloadProgress in 1..99) binding.tvAiStatus.text = if (isEnglish) "Downloading: ${state.downloadProgress}%" else "\u4e0b\u8f7d\u4e2d: ${state.downloadProgress}%"
 
                 if (state.isInitialized) {
-                    binding.tvAiStatus.text = "$engineText ready"
+                    binding.tvAiStatus.text = if (isEnglish) "$engineText ready" else "$engineText \u5c31\u7eea"
                     binding.btnInitAI.text = "AI Ready"
                     binding.btnInitAI.isEnabled = false
                     binding.tvResult.text = getString(com.visionlink.android.R.string.ai_model_ready)
@@ -192,7 +194,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun toggleContinuousMode() {
         if (!aiManager.isInitialized()) {
-            Toast.makeText(this, "Please initialize AI first", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, if (isEnglish) "Please initialize AI first" else "\u8bf7\u5148\u521d\u59cb\u5316AI", Toast.LENGTH_SHORT).show()
             return
         }
         isContinuousMode = !isContinuousMode
@@ -278,15 +280,15 @@ class MainActivity : AppCompatActivity() {
                 if (!isDestroyed) {
                     binding.btnDownloadModel.isEnabled = true
                     binding.btnDownloadModel.text = if (success) "Model Ready" else "Download Failed"
-                    if (success) speakSafely("Model downloaded. Tap Init AI.")
-                    else speakSafely("Model download failed")
+                    if (success) speakSafely(if (isEnglish) "Model downloaded. Tap Init AI." else "\u6a21\u578b\u5df2\u4e0b\u8f7d\uff0c\u8bf7\u70b9\u51fb\u521d\u59cb\u5316AI")
+                    else speakSafely(if (isEnglish) "Model download failed" else "\u6a21\u578b\u4e0b\u8f7d\u5931\u6548")
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Download failed: ${e.message}", e)
                 if (!isDestroyed) {
                     binding.btnDownloadModel.isEnabled = true
-                    binding.btnDownloadModel.text = "Download Failed"
-                    speakSafely("Model download failed")
+                    binding.btnDownloadModel.text = if (isEnglish) "Download Failed" else "\u4e0b\u8f7d\u5931\u6548"
+                    speakSafely(if (isEnglish) "Model download failed" else "\u6a21\u578b\u4e0b\u8f7d\u5931\u6548")
                 }
             }
         }
@@ -294,7 +296,14 @@ class MainActivity : AppCompatActivity() {
 
     private fun captureAndAnalyze() {
         if (!aiManager.isInitialized()) {
-            Toast.makeText(this, "Please initialize AI first", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, if (isEnglish) "Please initialize AI first" else "\u8bf7\u5148\u521d\u59cb\u5316AI", Toast.LENGTH_SHORT).show()
+            speakSafely(if (isEnglish) "Please initialize AI first" else "\u8bf7\u5148\u521d\u59cb\u5316AI")
+            return
+        }
+        if (!cameraManager.isCameraStarted()) {
+            binding.tvAiStatus.text = if (isEnglish) "Camera not ready" else "\u76f8\u673a\u672a\u542f\u52a8"
+            speakSafely(if (isEnglish) "Camera not ready, restarting..." else "\u76f8\u673a\u672a\u542f\u52a8\uff0c\u6b63\u5728\u91cd\u542f")
+            scope.launch { cameraManager.startCamera() }
             return
         }
         binding.tvAiStatus.text = getString(com.visionlink.android.R.string.status_capturing)
@@ -307,7 +316,7 @@ class MainActivity : AppCompatActivity() {
 
                 if (bitmap == null) {
                     binding.tvAiStatus.text = getString(com.visionlink.android.R.string.status_capture_failed)
-                    speakSafely("Capture failed")
+                    speakSafely(if (isEnglish) "Capture failed" else "\u62cd\u6444\u5931\u6548")
                     return@launch
                 }
 
@@ -326,7 +335,7 @@ class MainActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 Log.e(TAG, "Analysis failed: ${e.message}", e)
                 if (!isDestroyed) binding.tvAiStatus.text = getString(com.visionlink.android.R.string.status_analysis_failed)
-                speakSafely("Analysis failed")
+                speakSafely(if (isEnglish) "Analysis failed" else "\u5206\u6790\u5931\u6548")
             }
         }
     }
@@ -371,6 +380,7 @@ class MainActivity : AppCompatActivity() {
                     isEnglish = newIsEnglish
                     prefs.edit().putBoolean("isEnglish", isEnglish).apply()
                     voiceManager.setEnglish(isEnglish)
+                    ttsManager.switchLanguage(isEnglish)
                     applyLanguage()
                 }
                 dialog.dismiss()
@@ -404,7 +414,7 @@ class MainActivity : AppCompatActivity() {
                 binding.tvStatus.text = getString(com.visionlink.android.R.string.ring_scanning)
                 speakSafely(getString(com.visionlink.android.R.string.ring_scanning))
             } else {
-                speakSafely("Bluetooth permission required")
+                speakSafely(if (isEnglish) "Bluetooth permission required" else "\u9700\u8981\u84dd\u7259\u6743\u9650")
                 requestBluetoothPermissions()
             }
         }
@@ -449,7 +459,7 @@ class MainActivity : AppCompatActivity() {
             BleRingManager.RingEvent.TAP_DETECTED -> captureAndAnalyze()
             BleRingManager.RingEvent.DOUBLE_TAP -> {
                 if (!aiManager.isInitialized()) initAI()
-                else speakSafely("AI already ready")
+                else speakSafely(if (isEnglish) "AI already ready" else "AI\u5df2\u5c31\u7eea")
             }
             BleRingManager.RingEvent.LONG_PRESS -> toggleContinuousMode()
             BleRingManager.RingEvent.SWIPE_UP -> setMode(minOf(currentMode + 1, 3))
@@ -486,6 +496,8 @@ class MainActivity : AppCompatActivity() {
         config.setLocale(locale)
         super.attachBaseContext(newBase.createConfigurationContext(config))
     }
+
+
 
     private fun setMode(mode: Int) {
         currentMode = mode
@@ -571,6 +583,8 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        ttsManager.switchLanguage(isEnglish)
+        voiceManager.setEnglish(isEnglish)
         if (::cameraManager.isInitialized && !isDestroyed) {
             Log.d(TAG, "onResume: restarting camera")
             startCameraWithRetry()
