@@ -41,6 +41,7 @@ class CameraManager(
     private var _cameraStarted = false
     private var cameraExecutor: ExecutorService? = null
     private var imageAnalyzer: ImageAnalysis? = null
+    private var imageCapture: ImageCapture? = null
     private var currentMode = MODE_SINGLE_SHOT
     private var isAnalyzing = false
 
@@ -88,12 +89,18 @@ class CameraManager(
         val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
 
         try {
+            imageCapture = ImageCapture.Builder()
+                .setTargetResolution(android.util.Size(1920, 1080))
+                .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
+                .build()
+
             provider.unbindAll()
             provider.bindToLifecycle(
                 context as LifecycleOwner,
                 cameraSelector,
                 preview,
-                imageAnalyzer
+                imageAnalyzer,
+                imageCapture
             )
             Log.d(TAG, "Camera started successfully in mode: $mode")
             _cameraStarted = true
@@ -144,22 +151,37 @@ class CameraManager(
     }
 
     /**
-     * Capture single frame
+     * Capture single frame using ImageCapture API
      */
-    suspend fun capture(): Bitmap? = withContext(Dispatchers.IO) {
-        Log.d(TAG, "Capturing single frame")
+    suspend fun capture(): Bitmap? = suspendCoroutine { cont ->
+        Log.d(TAG, "Capturing single frame with ImageCapture")
 
-        if (cameraProvider == null) {
-            Log.e(TAG, "Camera not initialized")
-            return@withContext null
+        val imageCapture = this.imageCapture
+        if (imageCapture == null) {
+            Log.e(TAG, "ImageCapture not initialized")
+            cont.resume(null)
+            return@suspendCoroutine
         }
 
-        try {
-            previewView.bitmap
-        } catch (e: Exception) {
-            Log.e(TAG, "Capture failed: ${e.message}", e)
-            null
-        }
+        imageCapture.takePicture(ContextCompat.getMainExecutor(context), object : ImageCapture.OnImageCapturedCallback() {
+            override fun onCaptureSuccess(image: ImageProxy) {
+                try {
+                    val bitmap = image.toBitmap()
+                    Log.d(TAG, "Capture successful: ${bitmap.width}x${bitmap.height}")
+                    cont.resume(bitmap)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Bitmap conversion failed: ${e.message}", e)
+                    cont.resume(null)
+                } finally {
+                    image.close()
+                }
+            }
+
+            override fun onError(exception: ImageCaptureException) {
+                Log.e(TAG, "Capture failed: ${exception.message}", exception)
+                cont.resume(null)
+            }
+        })
     }
 
     /**
@@ -191,6 +213,7 @@ class CameraManager(
         } catch (e: Exception) {
             Log.w(TAG, "Executor shutdown error: ${e.message}")
         }
+        imageCapture = null
     }
 
     private suspend fun getCameraProvider(): ProcessCameraProvider? = suspendCoroutine { cont ->
