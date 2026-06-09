@@ -71,6 +71,9 @@ dependencies {
     // Rokid CXR-L SDK
     implementation("com.rokid.cxr:client-l:1.0.3")
 
+    // HTTP client for API calls
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+
     // Multidex
     implementation("androidx.multidex:multidex:2.0.1")
 

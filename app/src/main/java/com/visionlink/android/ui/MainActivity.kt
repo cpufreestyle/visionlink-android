@@ -121,6 +121,7 @@ class MainActivity : AppCompatActivity() {
                     AIInferenceManager.InferenceEngine.EDGE     -> "Edge (Gemma 4)"
                     AIInferenceManager.InferenceEngine.LITERT_LM  -> "LiteRT-LM (Gemma 4 E2B)"
                     AIInferenceManager.InferenceEngine.CLOUD     -> "Cloud (API)"
+                    AIInferenceManager.InferenceEngine.MOONSHOT  -> "Moonshot API (Kimi)"
                     AIInferenceManager.InferenceEngine.NONE      -> "Not selected"
                 }
                 binding.tvAiStatus.text = "Engine: $engineText"
