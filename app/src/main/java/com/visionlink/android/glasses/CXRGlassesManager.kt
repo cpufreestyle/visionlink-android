@@ -1,6 +1,11 @@
 package com.visionlink.android.glasses
 
 import android.content.Context
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothDevice
+import android.content.BroadcastReceiver
+import android.content.Intent
+import android.content.IntentFilter
 import android.util.Log
 import com.rokid.cxr.link.CXRLink
 import com.visionlink.android.VisionLinkApplication
@@ -32,6 +37,9 @@ class CXRGlassesManager(private val context: Context) {
         private set
 
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    
+    private var bluetoothAdapter: BluetoothAdapter? = null
+    private var bluetoothReceiver: BroadcastReceiver? = null
 
     // CXRLink instance from Application
     private val app: VisionLinkApplication
@@ -46,8 +54,7 @@ class CXRGlassesManager(private val context: Context) {
     // ========== Connection Lifecycle ==========
 
     /**
-     * Connect to Rokid glasses via CXR-L SDK.
-     * Authentication requires Rokid AI App installed.
+     * Connect to Rokid glasses - check Bluetooth connection
      */
     fun connect(callback: (Boolean) -> Unit) {
         if (connectionState == ConnectionState.CONNECTED) {
@@ -58,25 +65,60 @@ class CXRGlassesManager(private val context: Context) {
 
         scope.launch {
             try {
-                connectionState = ConnectionState.AUTHENTICATING
-                Log.i(TAG, "Starting CXR-L authentication...")
+                connectionState = ConnectionState.CONNECTING
+                Log.i(TAG, "Checking glasses connection...")
 
-                // Check if Rokid AI App is installed
-                val rokAppInstalled = isRokidAppInstalled()
-                if (!rokAppInstalled) {
-                    errorMessage = "Rokid AI App not installed. Please install from app store."
+                // Check Bluetooth connection
+                bluetoothAdapter = BluetoothAdapter.getDefaultAdapter()
+                if (bluetoothAdapter == null) {
+                    errorMessage = "Bluetooth not supported"
                     connectionState = ConnectionState.ERROR
-                    Log.e(TAG, errorMessage)
                     callback(false)
                     return@launch
                 }
 
-                // CXRLink will be obtained after successful auth via Rokid AI App
-                // The auth flow is handled by the Rokid AI App itself
-                // After auth completes, onAuthenticated() should be called with the link
-                Log.i(TAG, "CXR-L SDK ready. Auth via Rokid AI App required.")
-                connectionState = ConnectionState.CONNECTING
-                callback(true)
+                if (!bluetoothAdapter!!.isEnabled) {
+                    errorMessage = "Bluetooth is disabled"
+                    connectionState = ConnectionState.ERROR
+                    callback(false)
+                    return@launch
+                }
+
+                // Check if any bonded device is connected
+                val bondedDevices = bluetoothAdapter!!.bondedDevices
+                var glassesConnected = false
+                
+                for (device in bondedDevices) {
+                    val deviceName = device.name?.lowercase() ?: ""
+                    if (deviceName.contains("rokid") || deviceName.contains("cxr") || deviceName.contains("暴龙")) {
+                        // Check if device is actually connected
+                        val isConnected = isDeviceConnected(device)
+                        if (isConnected) {
+                            Log.i(TAG, "Found connected Rokid device: ${device.name}")
+                            glassesConnected = true
+                            break
+                        }
+                    }
+                }
+
+                if (glassesConnected) {
+                    connectionState = ConnectionState.CONNECTED
+                    Log.i(TAG, "Glasses connected via Bluetooth")
+                    callback(true)
+                } else {
+                    // Try CXR-L SDK auth flow
+                    val rokAppInstalled = isRokidAppInstalled()
+                    if (rokAppInstalled) {
+                        Log.i(TAG, "Rokid AI App installed, attempting CXR-L auth...")
+                        // Placeholder for real CXR-L auth
+                        connectionState = ConnectionState.AUTHENTICATING
+                        callback(true)
+                    } else {
+                        errorMessage = "Glasses not connected. Please pair via Bluetooth or install Rokid AI App"
+                        connectionState = ConnectionState.DISCONNECTED
+                        callback(false)
+                    }
+                }
 
             } catch (e: CancellationException) {
                 connectionState = ConnectionState.DISCONNECTED
@@ -87,6 +129,20 @@ class CXRGlassesManager(private val context: Context) {
                 Log.e(TAG, "Connection failed: ", e)
                 callback(false)
             }
+        }
+    }
+    
+    /**
+     * Check if Bluetooth device is connected
+     */
+    @Suppress("DEPRECATION")
+    private fun isDeviceConnected(device: BluetoothDevice): Boolean {
+        return try {
+            val method = device.javaClass.getMethod("isConnected")
+            method.invoke(device) as Boolean
+        } catch (e: Exception) {
+            // Fallback: assume connected if bonded
+            device.bondState == BluetoothDevice.BOND_BONDED
         }
     }
 
@@ -193,6 +249,14 @@ class CXRGlassesManager(private val context: Context) {
     fun release() {
         try {
             disconnect()
+            bluetoothReceiver?.let {
+                try {
+                    context.unregisterReceiver(it)
+                } catch (e: Exception) {
+                    Log.w(TAG, "Receiver unregister error: ${e.message}")
+                }
+            }
+            bluetoothAdapter = null
             scope.cancel("GlassesManager released")
             Log.i(TAG, "Glasses manager released")
         } catch (e: Exception) {
