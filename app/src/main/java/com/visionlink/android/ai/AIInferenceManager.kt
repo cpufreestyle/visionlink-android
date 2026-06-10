@@ -30,7 +30,7 @@ class AIInferenceManager(private val context: Context) {
         // Mimo API Configuration (correct endpoint)
         private const val MIMO_API_URL = "<SIGNED_URL_REMOVED>"
         private const val MOONSHOT_API_URL = "https://api.moonshot.cn/v1/chat/completions"
-        private const val MOONSHOT_API_KEY = "sk-kEm7V22Hx5iIpTMqSwv7zJ24ajgU3A3GjfWC25LFhmBsEBws"
+        private const val MOONSHOT_API_KEY = "1a5Zv7fDZ4psyGGyTVnHLH7zD7eqap98yWmXfhGvBmDH67TVQQEnvGHsoHSZR2QY0"
         private const val MOONSHOT_MODEL = "moonshot-v1-8k"
 
         const val MODEL_TYPE_GEMMA = "gemma4_e2b"
