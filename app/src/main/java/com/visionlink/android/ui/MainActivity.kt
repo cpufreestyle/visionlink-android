@@ -104,6 +104,7 @@ class MainActivity : AppCompatActivity() {
         binding.btnSettings?.setOnClickListener { openSettings() }
         binding.btnTestApi.setOnClickListener { testApi() }
         binding.btnTestLm.setOnClickListener { testLmStudio() }
+        binding.btnTestPplx.setOnClickListener { testPerplexity() }
         binding.btnExit.setOnClickListener { finish() }
 
         updateModeUI()
@@ -125,6 +126,7 @@ class MainActivity : AppCompatActivity() {
                     AIInferenceManager.InferenceEngine.CLOUD     -> "Cloud (API)"
                     AIInferenceManager.InferenceEngine.MOONSHOT  -> "Moonshot API (Kimi)"
                     AIInferenceManager.InferenceEngine.LM_STUDIO -> "LM Studio (Local)"
+                    AIInferenceManager.InferenceEngine.PERPLEXITY -> "Perplexity API (Sonar)"
                     AIInferenceManager.InferenceEngine.NONE      -> "Not selected"
                 }
                 binding.tvAiStatus.text = "Engine: $engineText"
@@ -325,6 +327,38 @@ class MainActivity : AppCompatActivity() {
                     binding.btnTestLm.isEnabled = true
                     binding.tvResult.text = "LM Studio Test FAILED:\n${e.message}"
                     Toast.makeText(this@MainActivity, "LM Studio Test FAILED: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
+
+    private fun testPerplexity() {
+        binding.tvAiStatus.text = "Testing Perplexity API..."
+        binding.tvResult.text = "Testing Perplexity API..."
+        binding.btnTestPplx.isEnabled = false
+
+        scope.launch {
+            try {
+                aiManager.setEngine(AIInferenceManager.InferenceEngine.PERPLEXITY)
+                val result = aiManager.testPerplexityConnection()
+                
+                runOnUiThread {
+                    binding.btnTestPplx.isEnabled = true
+                    binding.tvResult.text = "Perplexity Test Result:\n$result"
+                    
+                    if (result.startsWith("SUCCESS")) {
+                        Toast.makeText(this@MainActivity, "Perplexity Connected!", Toast.LENGTH_SHORT).show()
+                        speakSafely("Perplexity connected successfully")
+                    } else {
+                        Toast.makeText(this@MainActivity, result, Toast.LENGTH_LONG).show()
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Perplexity test error: ${e.message}", e)
+                runOnUiThread {
+                    binding.btnTestPplx.isEnabled = true
+                    binding.tvResult.text = "Perplexity Test FAILED:\n${e.message}"
+                    Toast.makeText(this@MainActivity, "Perplexity Test FAILED: ${e.message}", Toast.LENGTH_LONG).show()
                 }
             }
         }

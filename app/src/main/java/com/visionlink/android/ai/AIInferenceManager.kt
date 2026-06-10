@@ -32,6 +32,9 @@ class AIInferenceManager(private val context: Context) {
         private const val MOONSHOT_API_URL = "https://api.moonshot.cn/v1/chat/completions"
         private const val MOONSHOT_API_KEY = "1a5Zv7fDZ4psyGGyTVnHLH7zD7eqap98yWmXfhGvBmDH67TVQQEnvGHsoHSZR2QY0"
         private const val MOONSHOT_MODEL = "moonshot-v1-8k"
+        private const val PERPLEXITY_API_URL = "https://api.perplexity.ai/chat/completions"
+        private const val PERPLEXITY_API_KEY = "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"
+        private const val PERPLEXITY_MODEL = "sonar"
 
         const val MODEL_TYPE_GEMMA = "gemma4_e2b"
         const val MODEL_TYPE_GEMINI = "gemini_nano"
@@ -42,7 +45,7 @@ class AIInferenceManager(private val context: Context) {
         private const val MIN_SDK = 33
     }
 
-    enum class InferenceEngine { NONE, AICORE, EDGE, LITERT_LM, CLOUD, MOONSHOT, LM_STUDIO }
+    enum class InferenceEngine { NONE, AICORE, EDGE, LITERT_LM, CLOUD, MOONSHOT, LM_STUDIO, PERPLEXITY }
     enum class InferenceMode { SINGLE_SHOT, CONTINUOUS }
 
     data class ManagerState(
@@ -67,6 +70,51 @@ class AIInferenceManager(private val context: Context) {
     private val httpClient = OkHttpClient()
 
     // ========== API Test Method ==========
+
+    suspend fun testPerplexityConnection(): String = withContext(Dispatchers.IO) {
+        Log.d(TAG, "Testing Perplexity API connection...")
+        try {
+            val jsonBody = JSONObject().apply {
+                put("model", PERPLEXITY_MODEL)
+                put("temperature", 0.1f)
+                put("max_tokens", 50)
+                put("messages", JSONArray().apply {
+                    put(JSONObject().apply {
+                        put("role", "user")
+                        put("content", "Reply with just the word OK.")
+                    })
+                })
+            }
+            val requestBody = jsonBody.toString().toRequestBody("application/json".toMediaType())
+            val request = Request.Builder()
+                .url(PERPLEXITY_API_URL)
+                .addHeader("Authorization", "Bearer $PERPLEXITY_API_KEY")
+                .addHeader("Content-Type", "application/json")
+                .post(requestBody)
+                .build()
+            val response = httpClient.newCall(request).execute()
+            val responseBody = response.body?.string()
+            Log.d(TAG, "Perplexity response: ${response.code}")
+            if (!response.isSuccessful) {
+                return@withContext "Error ${response.code}: ${response.message}\n${responseBody?.take(200)}"
+            }
+            if (responseBody == null) return@withContext "Error: Empty response"
+            val jsonResponse = JSONObject(responseBody)
+            if (jsonResponse.has("error")) {
+                return@withContext "API Error: ${jsonResponse.getJSONObject("error").getString("message")}"
+            }
+            val choices = jsonResponse.getJSONArray("choices")
+            if (choices.length() > 0) {
+                val content = choices.getJSONObject(0).getJSONObject("message").getString("content")
+                return@withContext "SUCCESS: $content"
+            }
+            return@withContext "Response parsing error"
+        } catch (e: IOException) {
+            return@withContext "Network Error: ${e.message}\n可能无法访问 api.perplexity.ai"
+        } catch (e: Exception) {
+            return@withContext "Error: ${e.message}"
+        }
+    }
 
     suspend fun testApiConnection(): String = withContext(Dispatchers.IO) {
         Log.d(TAG, "Testing API connection...")
@@ -236,12 +284,83 @@ class AIInferenceManager(private val context: Context) {
             val result = when (currentEngine) {
                 InferenceEngine.MOONSHOT -> callMoonshotAPI(prompt, bitmap)
                 InferenceEngine.LM_STUDIO -> runLmStudioInference(prompt, bitmap)
+                InferenceEngine.PERPLEXITY -> callPerplexityAPI(prompt, bitmap)
                 else -> "Unsupported engine: $currentEngine"
             }
 
             updateFps()
             Log.d(TAG, "Result: ${result.take(80)}")
             result.trim()
+        }
+
+    // ========== Perplexity API Integration ==========
+
+    private suspend fun callPerplexityAPI(prompt: String, bitmap: Bitmap): String =
+        withContext(Dispatchers.IO) {
+            var retryCount = 0
+            val maxRetries = 2
+
+            while (retryCount <= maxRetries) {
+                try {
+                    // Perplexity sonar model does not support image input, send text only
+                    val jsonBody = JSONObject().apply {
+                        put("model", PERPLEXITY_MODEL)
+                        put("temperature", TEMPERATURE)
+                        put("max_tokens", MAX_TOKENS)
+                        put("messages", JSONArray().apply {
+                            put(JSONObject().apply {
+                                put("role", "user")
+                                put("content", prompt)
+                            })
+                        })
+                    }
+
+                    val requestBody = jsonBody.toString()
+                        .toRequestBody("application/json".toMediaType())
+
+                    val request = Request.Builder()
+                        .url(PERPLEXITY_API_URL)
+                        .addHeader("Authorization", "Bearer $PERPLEXITY_API_KEY")
+                        .addHeader("Content-Type", "application/json")
+                        .post(requestBody)
+                        .build()
+
+                    Log.d(TAG, "Calling Perplexity API (attempt ${retryCount + 1})...")
+                    val response = httpClient.newCall(request).execute()
+                    val responseBody = response.body?.string()
+
+                    if (!response.isSuccessful || responseBody == null) {
+                        Log.e(TAG, "Perplexity call failed: ${response.code}")
+                        if (retryCount < maxRetries) { retryCount++; continue }
+                        return@withContext "Perplexity 错误 ${response.code}: ${response.message}"
+                    }
+
+                    val jsonResponse = JSONObject(responseBody)
+                    if (jsonResponse.has("error")) {
+                        val errorMsg = jsonResponse.getJSONObject("error").getString("message")
+                        if (retryCount < maxRetries) { retryCount++; continue }
+                        return@withContext "Perplexity 错误: $errorMsg"
+                    }
+
+                    val choices = jsonResponse.getJSONArray("choices")
+                    if (choices.length() > 0) {
+                        val content = choices.getJSONObject(0)
+                            .getJSONObject("message")
+                            .getString("content")
+                        return@withContext content.trim()
+                    }
+
+                    return@withContext "Perplexity 返回格式错误"
+
+                } catch (e: IOException) {
+                    if (retryCount < maxRetries) { retryCount++; continue }
+                    return@withContext "网络错误: 无法连接到 Perplexity API"
+                } catch (e: Exception) {
+                    if (retryCount < maxRetries) { retryCount++; continue }
+                    return@withContext "Perplexity 错误: ${e.message}"
+                }
+            }
+            return@withContext "重试次数已用尽"
         }
 
     // ========== Moonshot API Integration ==========
