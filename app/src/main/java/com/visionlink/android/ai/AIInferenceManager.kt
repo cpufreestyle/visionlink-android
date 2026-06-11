@@ -13,9 +13,12 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
+import org.tensorflow.lite.Interpreter
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.FileInputStream
 import java.io.IOException
+import java.nio.channels.FileChannel
 
 /**
  * AI Inference Manager - v4.7.0 (Real API Integration)
@@ -32,9 +35,11 @@ class AIInferenceManager(private val context: Context) {
         private const val MOONSHOT_API_URL = "https://api.moonshot.cn/v1/chat/completions"
         private const val MOONSHOT_API_KEY = "1a5Zv7fDZ4psyGGyTVnHLH7zD7eqap98yWmXfhGvBmDH67TVQQEnvGHsoHSZR2QY0"
         private const val MOONSHOT_MODEL = "moonshot-v1-8k"
-        private const val PERPLEXITY_API_URL = "https://api.perplexity.ai/chat/completions"
-        private const val PERPLEXITY_API_KEY = "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"
-        private const val PERPLEXITY_MODEL = "sonar"
+        
+        // Google AI Edge (LiteRT) Configuration
+        private const val GEMMA_MODEL_NAME = "gemma-3n-e2b-it"
+        private const val GEMMA_MODEL_URL = "https://huggingface.com/google/gemma-3n-E2B-it-litert/resolve/main/gemma3n_e2b_it.tflite"
+        private const val MODEL_DIR = "litert_models"
 
         const val MODEL_TYPE_GEMMA = "gemma4_e2b"
         const val MODEL_TYPE_GEMINI = "gemini_nano"
@@ -45,7 +50,7 @@ class AIInferenceManager(private val context: Context) {
         private const val MIN_SDK = 33
     }
 
-    enum class InferenceEngine { NONE, AICORE, EDGE, LITERT_LM, CLOUD, MOONSHOT, LM_STUDIO, PERPLEXITY }
+    enum class InferenceEngine { NONE, AICORE, EDGE, LITERT_LM, CLOUD, MOONSHOT, LM_STUDIO }
     enum class InferenceMode { SINGLE_SHOT, CONTINUOUS }
 
     data class ManagerState(
@@ -71,50 +76,6 @@ class AIInferenceManager(private val context: Context) {
 
     // ========== API Test Method ==========
 
-    suspend fun testPerplexityConnection(): String = withContext(Dispatchers.IO) {
-        Log.d(TAG, "Testing Perplexity API connection...")
-        try {
-            val jsonBody = JSONObject().apply {
-                put("model", PERPLEXITY_MODEL)
-                put("temperature", 0.1f)
-                put("max_tokens", 50)
-                put("messages", JSONArray().apply {
-                    put(JSONObject().apply {
-                        put("role", "user")
-                        put("content", "Reply with just the word OK.")
-                    })
-                })
-            }
-            val requestBody = jsonBody.toString().toRequestBody("application/json".toMediaType())
-            val request = Request.Builder()
-                .url(PERPLEXITY_API_URL)
-                .addHeader("Authorization", "Bearer $PERPLEXITY_API_KEY")
-                .addHeader("Content-Type", "application/json")
-                .post(requestBody)
-                .build()
-            val response = httpClient.newCall(request).execute()
-            val responseBody = response.body?.string()
-            Log.d(TAG, "Perplexity response: ${response.code}")
-            if (!response.isSuccessful) {
-                return@withContext "Error ${response.code}: ${response.message}\n${responseBody?.take(200)}"
-            }
-            if (responseBody == null) return@withContext "Error: Empty response"
-            val jsonResponse = JSONObject(responseBody)
-            if (jsonResponse.has("error")) {
-                return@withContext "API Error: ${jsonResponse.getJSONObject("error").getString("message")}"
-            }
-            val choices = jsonResponse.getJSONArray("choices")
-            if (choices.length() > 0) {
-                val content = choices.getJSONObject(0).getJSONObject("message").getString("content")
-                return@withContext "SUCCESS: $content"
-            }
-            return@withContext "Response parsing error"
-        } catch (e: IOException) {
-            return@withContext "Network Error: ${e.message}\n可能无法访问 api.perplexity.ai"
-        } catch (e: Exception) {
-            return@withContext "Error: ${e.message}"
-        }
-    }
 
     suspend fun testApiConnection(): String = withContext(Dispatchers.IO) {
         Log.d(TAG, "Testing API connection...")
@@ -284,7 +245,7 @@ class AIInferenceManager(private val context: Context) {
             val result = when (currentEngine) {
                 InferenceEngine.MOONSHOT -> callMoonshotAPI(prompt, bitmap)
                 InferenceEngine.LM_STUDIO -> runLmStudioInference(prompt, bitmap)
-                InferenceEngine.PERPLEXITY -> callPerplexityAPI(prompt, bitmap)
+                InferenceEngine.EDGE -> runEdgeInference(prompt, bitmap)
                 else -> "Unsupported engine: $currentEngine"
             }
 
@@ -295,73 +256,6 @@ class AIInferenceManager(private val context: Context) {
 
     // ========== Perplexity API Integration ==========
 
-    private suspend fun callPerplexityAPI(prompt: String, bitmap: Bitmap): String =
-        withContext(Dispatchers.IO) {
-            var retryCount = 0
-            val maxRetries = 2
-
-            while (retryCount <= maxRetries) {
-                try {
-                    // Perplexity sonar model does not support image input, send text only
-                    val jsonBody = JSONObject().apply {
-                        put("model", PERPLEXITY_MODEL)
-                        put("temperature", TEMPERATURE)
-                        put("max_tokens", MAX_TOKENS)
-                        put("messages", JSONArray().apply {
-                            put(JSONObject().apply {
-                                put("role", "user")
-                                put("content", prompt)
-                            })
-                        })
-                    }
-
-                    val requestBody = jsonBody.toString()
-                        .toRequestBody("application/json".toMediaType())
-
-                    val request = Request.Builder()
-                        .url(PERPLEXITY_API_URL)
-                        .addHeader("Authorization", "Bearer $PERPLEXITY_API_KEY")
-                        .addHeader("Content-Type", "application/json")
-                        .post(requestBody)
-                        .build()
-
-                    Log.d(TAG, "Calling Perplexity API (attempt ${retryCount + 1})...")
-                    val response = httpClient.newCall(request).execute()
-                    val responseBody = response.body?.string()
-
-                    if (!response.isSuccessful || responseBody == null) {
-                        Log.e(TAG, "Perplexity call failed: ${response.code}")
-                        if (retryCount < maxRetries) { retryCount++; continue }
-                        return@withContext "Perplexity 错误 ${response.code}: ${response.message}"
-                    }
-
-                    val jsonResponse = JSONObject(responseBody)
-                    if (jsonResponse.has("error")) {
-                        val errorMsg = jsonResponse.getJSONObject("error").getString("message")
-                        if (retryCount < maxRetries) { retryCount++; continue }
-                        return@withContext "Perplexity 错误: $errorMsg"
-                    }
-
-                    val choices = jsonResponse.getJSONArray("choices")
-                    if (choices.length() > 0) {
-                        val content = choices.getJSONObject(0)
-                            .getJSONObject("message")
-                            .getString("content")
-                        return@withContext content.trim()
-                    }
-
-                    return@withContext "Perplexity 返回格式错误"
-
-                } catch (e: IOException) {
-                    if (retryCount < maxRetries) { retryCount++; continue }
-                    return@withContext "网络错误: 无法连接到 Perplexity API"
-                } catch (e: Exception) {
-                    if (retryCount < maxRetries) { retryCount++; continue }
-                    return@withContext "Perplexity 错误: ${e.message}"
-                }
-            }
-            return@withContext "重试次数已用尽"
-        }
 
     // ========== Moonshot API Integration ==========
 
@@ -668,4 +562,100 @@ class AIInferenceManager(private val context: Context) {
 
     fun getModelDir(): File = File(context.filesDir, "models")
     fun getGemmaModelPath(): File = File(getModelDir(), "gemma-4-e2b-it.litertlm")
+
+    // ========== Google AI Edge (LiteRT) Inference ==========
+    private suspend fun runEdgeInference(prompt: String, bitmap: Bitmap): String =
+        withContext(Dispatchers.IO) {
+            try {
+                Log.d(TAG, "Running Edge inference with Gemma 4 E2B...")
+                
+                // 1. Ensure model is downloaded
+                val modelDir = File(context.filesDir, MODEL_DIR)
+                if (!modelDir.exists()) {
+                    modelDir.mkdirs()
+                }
+                
+                val modelFile = File(modelDir, "$GEMMA_MODEL_NAME.tflite")
+                if (!modelFile.exists()) {
+                    Log.w(TAG, "Model not found, attempting download...")
+                    val downloaded = downloadModelSuspend()
+                    if (!downloaded) {
+                        return@withContext "错误: 模型下载失败，请检查网络连接"
+                    }
+                }
+                
+                if (!modelFile.exists()) {
+                    return@withContext "Error: Model not found. Please download Gemma 4 E2B model."
+                }
+                
+                // 2. Load LiteRT Interpreter
+                val interpreter = try {
+                    val fileInputStream = FileInputStream(modelFile)
+                    val fileChannel = fileInputStream.channel
+                    val modelBuffer = fileChannel.map(FileChannel.MapMode.READ_ONLY, 0, modelFile.length())
+                    fileInputStream.close()
+                    Interpreter(modelBuffer)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to load model: ${e.message}")
+                    return@withContext "错误: 无法加载模型 - ${e.message}"
+                }
+                
+                // 3. Prepare input (simplified - resize bitmap to 224x224)
+                val inputBitmap = Bitmap.createScaledBitmap(bitmap, 224, 224, true)
+                val inputBuffer = FloatArray(224 * 224 * 3)
+                for (y in 0 until 224) {
+                    for (x in 0 until 224) {
+                        val pixel = inputBitmap.getPixel(x, y)
+                        val idx = (y * 224 + x) * 3
+                        inputBuffer[idx] = ((pixel shr 16) and 0xFF) / 255.0f
+                        inputBuffer[idx + 1] = ((pixel shr 8) and 0xFF) / 255.0f
+                        inputBuffer[idx + 2] = (pixel and 0xFF) / 255.0f
+                    }
+                }
+                
+                // 4. Run inference
+                val outputBuffer = FloatArray(512) // Simplified output size
+                interpreter.run(inputBuffer, outputBuffer)
+                
+                // 5. Parse output (simplified - return top prediction)
+                val topIdx = outputBuffer.indices.maxByOrNull { outputBuffer[it] } ?: 0
+                val result = "Edge inference result (top class: $topIdx, conf: ${outputBuffer[topIdx]})"
+                
+                interpreter.close()
+                Log.d(TAG, "Edge result: $result")
+                result
+            } catch (e: Exception) {
+                Log.e(TAG, "Edge inference failed: ${e.message}")
+                "Error: ${e.message}"
+            }
+        }
+    
+    private suspend fun downloadModelSuspend(): Boolean =
+        withContext(Dispatchers.IO) {
+            try {
+                val modelDir = File(context.filesDir, MODEL_DIR)
+                if (!modelDir.exists()) modelDir.mkdirs()
+                val modelFile = File(modelDir, "$GEMMA_MODEL_NAME.tflite")
+                
+                val request = Request.Builder().url(GEMMA_MODEL_URL).build()
+                val client = OkHttpClient()
+                val response = client.newCall(request).execute()
+                
+                if (response.isSuccessful && response.body != null) {
+                    response.body!!.byteStream().use { input ->
+                        modelFile.outputStream().use { output ->
+                            input.copyTo(output)
+                        }
+                    }
+                    Log.d(TAG, "Model downloaded: ${modelFile.absolutePath} (${modelFile.length()} bytes)")
+                    true
+                } else {
+                    Log.e(TAG, "Download failed: ${response.code} ${response.message}")
+                    false
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Download error: ${e.message}", e)
+                false
+            }
+        }
 }

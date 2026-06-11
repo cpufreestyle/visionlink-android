@@ -11,8 +11,8 @@ android {
         applicationId = "com.visionlink.android"
         minSdk = 31
         targetSdk = 35
-        versionCode = 6
-        versionName = "4.6.0"
+        versionCode = 8
+        versionName = "4.8.0"
 
         multiDexEnabled = true
     }
@@ -74,6 +74,12 @@ dependencies {
 
     // HTTP client for API calls (also used for LM Studio connection)
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+
+    // Google AI Edge (LiteRT) for on-device inference
+    implementation("com.google.ai.edge.litert:litert:1.2.0")
+    implementation("com.google.ai.edge.litert:litert-gpu:1.2.0")
+    // Gemma model support (if using Google's Gemma 4 E2B)
+    implementation("com.google.android.gms:play-services-tasks:18.1.0")
 
     // Multidex
     implementation("androidx.multidex:multidex:2.0.1")
