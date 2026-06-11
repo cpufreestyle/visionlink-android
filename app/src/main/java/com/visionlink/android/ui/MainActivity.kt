@@ -104,6 +104,7 @@ class MainActivity : AppCompatActivity() {
         binding.btnSettings?.setOnClickListener { openSettings() }
         binding.btnTestApi.setOnClickListener { testApi() }
         binding.btnTestLm.setOnClickListener { testLmStudio() }
+        binding.btnTestEdge.setOnClickListener { testEdge() }
         binding.btnExit.setOnClickListener { finish() }
 
         updateModeUI()
@@ -330,6 +331,55 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun testEdge() {
+        binding.tvAiStatus.text = "Testing EDGE (Local Model)..."
+        binding.tvResult.text = "Testing local LiteRT model..."
+        binding.btnTestEdge.isEnabled = false
+
+        scope.launch {
+            try {
+                aiManager.setEngine(AIInferenceManager.InferenceEngine.EDGE)
+
+                // 检查模型是否已下载
+                if (!aiManager.isModelDownloaded()) {
+                    runOnUiThread {
+                        binding.btnTestEdge.isEnabled = true
+                        binding.tvResult.text = "EDGE model not downloaded yet. Tap 'Download Model' first."
+                        binding.tvAiStatus.text = "EDGE: Model needed"
+                        Toast.makeText(this@MainActivity, "Download model first", Toast.LENGTH_LONG).show()
+                    }
+                    return@launch
+                }
+
+                // 用 EDGE 引擎初始化并测试
+                aiManager.initialize()
+                val st = aiManager.state.value
+                val result = if (st.isInitialized) {
+                    "EDGE engine initialized successfully. Model loaded and ready."
+                } else if (st.initError != null) {
+                    "EDGE engine failed: ${st.initError}"
+                } else {
+                    "EDGE engine status: initialized=${st.isInitialized}, model=${st.modelDownloaded}"
+                }
+
+                runOnUiThread {
+                    binding.btnTestEdge.isEnabled = true
+                    binding.tvResult.text = "EDGE Test Result:\n$result"
+                    binding.tvAiStatus.text = "EDGE: ${if (st.isInitialized) "Ready" else "Error"}"
+                    Toast.makeText(this@MainActivity, "EDGE test completed", Toast.LENGTH_SHORT).show()
+                    speakSafely("Edge engine test completed")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "EDGE test error: ${e.message}", e)
+                runOnUiThread {
+                    binding.btnTestEdge.isEnabled = true
+                    binding.tvResult.text = "EDGE Test FAILED:\n${e.message}"
+                    binding.tvAiStatus.text = "EDGE: Error"
+                    Toast.makeText(this@MainActivity, "EDGE FAILED: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
 
     private fun downloadModel() {
         if (aiManager.isModelDownloaded()) {
