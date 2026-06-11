@@ -220,11 +220,11 @@ class AIInferenceManager(private val context: Context) {
     }
 
     suspend fun initialize() = withContext(Dispatchers.IO) {
-        Log.d(TAG, "Initializing AI Inference Manager with Moonshot API")
-        currentEngine = InferenceEngine.MOONSHOT
+        Log.d(TAG, "Initializing AI Inference Manager with ${currentEngine.name}")
+        // Keep current engine (don't override setEngine)
         updateState {
             copy(
-                engine = InferenceEngine.MOONSHOT,
+                engine = currentEngine,
                 isInitialized = true,
                 modelDownloaded = true,
                 downloadProgress = 100
