@@ -34,8 +34,10 @@ android {
         isCoreLibraryDesugaringEnabled = true
     }
 
-    kotlinOptions {
-        jvmTarget = "17"
+    kotlin {
+        compilerOptions {
+            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+        }
     }
 
     buildFeatures {
@@ -75,10 +77,10 @@ dependencies {
     // HTTP client for API calls (also used for LM Studio connection)
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
-    // Google AI Edge (LiteRT) for on-device inference
-    implementation("com.google.ai.edge.litert:litert:1.2.0")
+    // Google AI Edge LiteRT-LM for on-device LLM inference
+    implementation("com.google.ai.edge.litertlm:litertlm-android:latest.release")
+    // GPU backend support
     implementation("com.google.ai.edge.litert:litert-gpu:1.2.0")
-    // Gemma model support (if using Google's Gemma 4 E2B)
     implementation("com.google.android.gms:play-services-tasks:18.1.0")
 
     // Multidex

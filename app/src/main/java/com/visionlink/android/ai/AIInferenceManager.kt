@@ -13,12 +13,10 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
-import org.tensorflow.lite.Interpreter
+import com.google.ai.edge.litertlm.*
 import java.io.ByteArrayOutputStream
 import java.io.File
-import java.io.FileInputStream
 import java.io.IOException
-import java.nio.channels.FileChannel
 
 /**
  * AI Inference Manager - v4.7.0 (Real API Integration)
@@ -36,9 +34,8 @@ class AIInferenceManager(private val context: Context) {
         private const val MOONSHOT_API_KEY = "1a5Zv7fDZ4psyGGyTVnHLH7zD7eqap98yWmXfhGvBmDH67TVQQEnvGHsoHSZR2QY0"
         private const val MOONSHOT_MODEL = "moonshot-v1-8k"
         
-        // Google AI Edge (LiteRT) Configuration
-        private const val GEMMA_MODEL_NAME = "gemma-3n-e2b-it"
-        private const val GEMMA_MODEL_URL = "https://huggingface.com/google/gemma-3n-E2B-it-litert/resolve/main/gemma3n_e2b_it.tflite"
+        // Google AI Edge LiteRT-LM Configuration
+        private const val GEMMA_MODEL_NAME = "gemma-3n-E2B-it-int4"
         private const val MODEL_DIR = "litert_models"
 
         const val MODEL_TYPE_GEMMA = "gemma4_e2b"
@@ -563,99 +560,86 @@ class AIInferenceManager(private val context: Context) {
     fun getModelDir(): File = File(context.filesDir, "models")
     fun getGemmaModelPath(): File = File(getModelDir(), "gemma-4-e2b-it.litertlm")
 
-    // ========== Google AI Edge (LiteRT) Inference ==========
+    // ========== LiteRT-LM Engine Instance ==========
+    private var litertEngine: Engine? = null
+
+    // ========== Google AI Edge LiteRT-LM Inference ==========
     private suspend fun runEdgeInference(prompt: String, bitmap: Bitmap): String =
         withContext(Dispatchers.IO) {
             try {
-                Log.d(TAG, "Running Edge inference with Gemma 4 E2B...")
-                
-                // 1. Ensure model is downloaded
-                val modelDir = File(context.filesDir, MODEL_DIR)
-                if (!modelDir.exists()) {
-                    modelDir.mkdirs()
-                }
-                
-                val modelFile = File(modelDir, "$GEMMA_MODEL_NAME.tflite")
-                if (!modelFile.exists()) {
-                    Log.w(TAG, "Model not found, attempting download...")
-                    val downloaded = downloadModelSuspend()
-                    if (!downloaded) {
-                        return@withContext "错误: 模型下载失败，请检查网络连接"
-                    }
-                }
-                
-                if (!modelFile.exists()) {
-                    return@withContext "Error: Model not found. Please download Gemma 4 E2B model."
-                }
-                
-                // 2. Load LiteRT Interpreter
-                val interpreter = try {
-                    val fileInputStream = FileInputStream(modelFile)
-                    val fileChannel = fileInputStream.channel
-                    val modelBuffer = fileChannel.map(FileChannel.MapMode.READ_ONLY, 0, modelFile.length())
-                    fileInputStream.close()
-                    Interpreter(modelBuffer)
-                } catch (e: Exception) {
-                    Log.e(TAG, "Failed to load model: ${e.message}")
-                    return@withContext "错误: 无法加载模型 - ${e.message}"
-                }
-                
-                // 3. Prepare input (simplified - resize bitmap to 224x224)
-                val inputBitmap = Bitmap.createScaledBitmap(bitmap, 224, 224, true)
-                val inputBuffer = FloatArray(224 * 224 * 3)
-                for (y in 0 until 224) {
-                    for (x in 0 until 224) {
-                        val pixel = inputBitmap.getPixel(x, y)
-                        val idx = (y * 224 + x) * 3
-                        inputBuffer[idx] = ((pixel shr 16) and 0xFF) / 255.0f
-                        inputBuffer[idx + 1] = ((pixel shr 8) and 0xFF) / 255.0f
-                        inputBuffer[idx + 2] = (pixel and 0xFF) / 255.0f
-                    }
-                }
-                
-                // 4. Run inference
-                val outputBuffer = FloatArray(512) // Simplified output size
-                interpreter.run(inputBuffer, outputBuffer)
-                
-                // 5. Parse output (simplified - return top prediction)
-                val topIdx = outputBuffer.indices.maxByOrNull { outputBuffer[it] } ?: 0
-                val result = "Edge inference result (top class: $topIdx, conf: ${outputBuffer[topIdx]})"
-                
-                interpreter.close()
-                Log.d(TAG, "Edge result: $result")
-                result
-            } catch (e: Exception) {
-                Log.e(TAG, "Edge inference failed: ${e.message}")
-                "Error: ${e.message}"
-            }
-        }
-    
-    private suspend fun downloadModelSuspend(): Boolean =
-        withContext(Dispatchers.IO) {
-            try {
+                Log.d(TAG, "Running LiteRT-LM inference with Gemma 3n E2B...")
+
+                // 1. Find model file (.litertlm format)
                 val modelDir = File(context.filesDir, MODEL_DIR)
                 if (!modelDir.exists()) modelDir.mkdirs()
-                val modelFile = File(modelDir, "$GEMMA_MODEL_NAME.tflite")
-                
-                val request = Request.Builder().url(GEMMA_MODEL_URL).build()
-                val client = OkHttpClient()
-                val response = client.newCall(request).execute()
-                
-                if (response.isSuccessful && response.body != null) {
-                    response.body!!.byteStream().use { input ->
-                        modelFile.outputStream().use { output ->
-                            input.copyTo(output)
-                        }
-                    }
-                    Log.d(TAG, "Model downloaded: ${modelFile.absolutePath} (${modelFile.length()} bytes)")
-                    true
-                } else {
-                    Log.e(TAG, "Download failed: ${response.code} ${response.message}")
-                    false
+
+                val modelFile = File(modelDir, "$GEMMA_MODEL_NAME.litertlm")
+                if (!modelFile.exists()) {
+                    Log.w(TAG, "LiteRT-LM model not found at ${modelFile.absolutePath}")
+                    return@withContext "错误: 本地模型未下载。请先从 Google AI Edge Gallery 下载 Gemma 3n E2B 模型，或将 .litertlm 文件复制到 ${modelFile.absolutePath}"
+                }
+
+                // 2. Initialize LiteRT-LM Engine
+                if (litertEngine == null) {
+                    val engineConfig = EngineConfig(
+                        modelPath = modelFile.absolutePath,
+                        backend = Backend.GPU(),
+                        visionBackend = Backend.GPU(),
+                        cacheDir = context.cacheDir.absolutePath
+                    )
+                    litertEngine = Engine(engineConfig)
+                    litertEngine!!.initialize()
+                    Log.d(TAG, "LiteRT-LM engine initialized")
+                }
+
+                // 3. Create conversation with multimodal input
+                val conversationConfig = ConversationConfig(
+                    systemInstruction = Contents.of("You are a vision assistant. Describe what you see in the image concisely."),
+                    samplerConfig = SamplerConfig(topK = 10, topP = 0.95, temperature = 0.4)
+                )
+
+                litertEngine!!.createConversation(conversationConfig).use { conversation ->
+                    // 4. Send image + text prompt
+                    // Convert bitmap to byte array for ImageBytes content
+                    val stream = ByteArrayOutputStream()
+                    bitmap.compress(Bitmap.CompressFormat.JPEG, 90, stream)
+                    val imageBytes = stream.toByteArray()
+
+                    val contents = Contents.of(
+                        Content.ImageBytes(imageBytes),
+                        Content.Text(prompt.ifEmpty { "Describe this image in detail." })
+                    )
+
+                    val response = conversation.sendMessage(contents)
+                    val responseText = response.toString()
+                    Log.d(TAG, "LiteRT-LM response: $responseText")
+                    responseText
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Download error: ${e.message}", e)
-                false
+                Log.e(TAG, "LiteRT-LM inference failed: ${e.message}", e)
+                // Release engine on error
+                litertEngine?.close()
+                litertEngine = null
+                "错误: LiteRT-LM 推理失败 - ${e.message}"
             }
         }
+
+    /**
+     * Test LiteRT-LM engine connection (check model exists and engine can load)
+     */
+    suspend fun testEdgeConnection(): String = withContext(Dispatchers.IO) {
+        try {
+            val modelDir = File(context.filesDir, MODEL_DIR)
+            val modelFile = File(modelDir, "$GEMMA_MODEL_NAME.litertlm")
+
+            if (!modelFile.exists()) {
+                "⚠️ 模型未找到: ${modelFile.absolutePath}\n请从 Google AI Edge Gallery App 下载 Gemma 3n E2B，或手动复制 .litertlm 文件到该路径"
+            } else {
+                val sizeMb = modelFile.length() / (1024 * 1024)
+                "✅ 模型已就绪: ${modelFile.name} (${sizeMb}MB)\n路径: ${modelFile.absolutePath}"
+            }
+        } catch (e: Exception) {
+            "❌ 检查失败: ${e.message}"
+        }
+    }
 }
