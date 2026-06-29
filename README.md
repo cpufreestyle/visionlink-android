@@ -1,4 +1,4 @@
-# VisionLink Android - 全离线端侧 AI 助盲眼镜
+﻿# VisionLink Android - 全离线端侧 AI 助盲眼镜
 
 > 基于 Gemma 4 E2B 的全离线端侧 AI 助盲眼镜 Android 实现  
 > 对应 PC 版: [VisionLink-AI-Glasses](https://github.com/your-repo/VisionLink-AI-Glasses)
@@ -34,7 +34,7 @@
 - ✅ **全离线运行**: 无需网络，所有 AI 推理在手机本地完成
 - ✅ **低延迟**: 端侧推理，响应速度快
 - ✅ **隐私保护**: 图像数据不上传云端
-- ✅ **眼镜集成**: 通过 CXR-M SDK 连接智能眼镜 (Rokid)
+- ✅ **眼镜集成**: 通过 CXR-L SDK 连接智能眼镜 (Rokid)
 - ✅ **多模式**: 避障、文字阅读、场景描述三种模式
 
 ### 对应 PC 版功能映射
@@ -45,7 +45,7 @@
 | `cv2.VideoCapture()` | CameraX | ✅ 完成 |
 | `ollama.chat()` (Gemma 4) | LiteRT-LM | ✅ 完成 (模拟) |
 | `speak()` (TTS) | Android TTS | ✅ 完成 |
-| `CXR-M SDK` | CXR-M AIDL | 🔧 模拟 (需真实 SDK) |
+| `CXR-L SDK` | CXR-L AIDL | 🔧 模拟 (需真实 SDK) |
 | OpenCV 显示 | HUD Layout | ✅ 完成 |
 
 ---
@@ -69,7 +69,7 @@
 | **推理框架** | LiteRT-LM + LiteRT | Google 端侧推理框架 |
 | **摄像头** | CameraX | AndroidX Camera 库 |
 | **语音** | Android TTS | 系统自带 TTS 引擎 |
-| **眼镜** | CXR-M SDK (Rokid) | 智能眼镜连接 (模拟) |
+| **眼镜** | CXR-L SDK (Rokid) | 智能眼镜连接 (模拟) |
 | **架构** | 手机主控，眼镜从端 | 手机处理 AI，眼镜显示+音频 |
 
 ### 3️⃣ 系统要求
@@ -78,7 +78,7 @@
 - **RAM**: 建议 6GB 以上 (运行 Gemma 4 E2B 需要 4GB+)
 - **存储**: 建议 8GB 可用空间 (模型文件约 4GB)
 - **摄像头**: 后置摄像头 (建议 720p 以上)
-- **眼镜**: CXR-M 兼容智能眼镜 (可选)
+- **眼镜**: CXR-L 兼容智能眼镜 (可选)
 
 ---
 
@@ -192,7 +192,7 @@ cd visionlink-android
 
 ### 连接眼镜 (可选)
 
-1. 确保 CXR-M 兼容眼镜已开机
+1. 确保 CXR-L 兼容眼镜已开机
 2. 应用会自动连接 (显示 "眼镜已连接")
 3. 语音会自动输出到眼镜音频
 
@@ -393,11 +393,11 @@ class CXRGlassesManager(context: Context) {
 
 **症状**: 显示 "眼镜未连接"
 
-**原因**: CXR-M SDK 未集成或眼镜未开机
+**原因**: CXR-L SDK 未集成或眼镜未开机
 
 **解决**:
 1. 确认眼镜已开机并进入配对模式
-2. 集成真实的 CXR-M SDK (当前为模拟模式)
+2. 集成真实的 CXR-L SDK (当前为模拟模式)
 3. 检查蓝牙权限
 
 ---
@@ -421,7 +421,7 @@ class CXRGlassesManager(context: Context) {
 
 ### 待完成任务
 
-- [ ] 集成真实的 CXR-M SDK (当前为模拟)
+- [ ] 集成真实的 CXR-L SDK (当前为模拟)
 - [ ] 优化 Gemma 4 E2B 推理速度 (当前模拟)
 - [ ] 添加更多视觉模型 (YOLO, SSD)
 - [ ] 支持蓝牙眼镜连接
@@ -589,7 +589,7 @@ private const val MAX_TOKENS = 128  // 从 256 减少到 128，加快推理速�
 
 ### 下一步
 
-- [ ] 集成真实的 **CXR-M SDK** (当前为模拟)
+- [ ] 集成真实的 **CXR-L SDK** (当前为模拟)
 - [ ] 优化 **Gemma 4 E2B 推理速度** (使用 GPU/NNAPI)
 - [ ] 添加 **用户设置界面** (调整温度、Token 数等)
 - [ ] 支持 **更多视觉模型** (YOLO, SSD)
@@ -609,7 +609,7 @@ private const val MAX_TOKENS = 128  // 从 256 减少到 128，加快推理速�
 ## 🙏 致谢
 
 - **Google LiteRT-LM 团队** - 提供端侧 LLM 推理框架
-- **Rokid** - 提供 CXR-M 智能眼镜 SDK
+- **Rokid** - 提供 CXR-L 智能眼镜 SDK
 - **TensorFlow Lite 团队** - 提供视觉模型推理框架
 - **PC 版作者** - [VisionLink-AI-Glasses](https://github.com/your-repo/VisionLink-AI-Glasses)
 
