@@ -36,34 +36,35 @@ class TTSManager(
     init {
         tts = TextToSpeech(context) { status ->
             if (status == TextToSpeech.SUCCESS) {
-                // 设置中文语音
+                // 设置中文语音，缺语音包时回退英文，但无论哪种语言都要完成初始化流程
                 val result = tts?.setLanguage(Locale.CHINESE)
-                
-                if (result == TextToSpeech.LANG_MISSING_DATA || 
+
+                if (result == TextToSpeech.LANG_MISSING_DATA ||
                     result == TextToSpeech.LANG_NOT_SUPPORTED) {
                     Log.w(TAG, "Chinese not supported, falling back to US English")
                     tts?.setLanguage(Locale.US)
                 } else {
                     Log.d(TAG, "TTS initialized (Chinese)")
-                    isInitialized = true
-                    
-                    // 设置语音参数
-                    setVoiceParams()
-                    
-                    // 设置发音监听
-                    setupUtteranceListener()
-                    
-                    // 发送待处理的文本
-                    synchronized(pendingLock) {
-                        pendingText?.let {
-                            speakInternal(it)
-                            pendingText = null
-                        }
-                    }
-                    
-                    // 通知初始化监听器
-                    initListener.onInit(status)
                 }
+
+                isInitialized = true
+
+                // 设置语音参数
+                setVoiceParams()
+
+                // 设置发音监听
+                setupUtteranceListener()
+
+                // 发送待处理的文本
+                synchronized(pendingLock) {
+                    pendingText?.let {
+                        speakInternal(it)
+                        pendingText = null
+                    }
+                }
+
+                // 通知初始化监听器
+                initListener.onInit(status)
             } else {
                 Log.e(TAG, "TTS initialization failed")
                 initListener.onInit(status)

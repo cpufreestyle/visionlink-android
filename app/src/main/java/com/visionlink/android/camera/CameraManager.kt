@@ -2,6 +2,7 @@ package com.visionlink.android.camera
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.Matrix
 import android.util.Log
 import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
@@ -45,6 +46,11 @@ class CameraManager(
     private var currentMode = MODE_SINGLE_SHOT
     private var isAnalyzing = false
 
+    // 实时帧回调（指向引导等实时模式使用）
+    @Volatile private var frameListener: ((Bitmap) -> Unit)? = null
+    @Volatile private var frameIntervalMs: Long = 250L
+    @Volatile private var lastFrameTs: Long = 0L
+
     // Continuous mode state
     private val _analysisResults = MutableSharedFlow<AnalysisResult>(replay = 0)
     val analysisResults: SharedFlow<AnalysisResult> = _analysisResults.asSharedFlow()
@@ -54,6 +60,17 @@ class CameraManager(
         val result: String,
         val timestamp: Long
     )
+
+    /**
+     * 注册实时帧回调：按 intervalMs 节流，bitmap 已按 rotationDegrees 转正。
+     * 回调在相机分析线程执行（单线程，回调内可做耗时推理，期间新帧自动丢弃）。
+     * 传 null 取消回调。
+     */
+    fun setFrameListener(intervalMs: Long = 250L, listener: ((Bitmap) -> Unit)?) {
+        frameIntervalMs = intervalMs
+        frameListener = listener
+        Log.d(TAG, if (listener != null) "帧回调已注册 (间隔 ${intervalMs}ms)" else "帧回调已取消")
+    }
 
     /**
      * Start camera with continuous detection support
@@ -78,13 +95,10 @@ class CameraManager(
             .also { it.setSurfaceProvider(previewView.surfaceProvider) }
 
         imageAnalyzer = ImageAnalysis.Builder()
-            .setTargetResolution(android.util.Size(1920, 1080))
+            .setTargetResolution(android.util.Size(1280, 720))
             .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
             .build()
-
-        if (mode == MODE_CONTINUOUS) {
-            setupContinuousAnalysis(frameRate)
-        }
+            .also { setupFrameAnalyzer(it) }
 
         val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
 
@@ -113,23 +127,37 @@ class CameraManager(
     fun isCameraStarted(): Boolean = _cameraStarted
 
     /**
-     * Setup continuous frame analysis
+     * 统一的帧分析器：有 frameListener 时按节流间隔转正 bitmap 并回调，
+     * 否则立即释放帧（零开销）。
      */
-    private fun setupContinuousAnalysis(frameRate: Int) {
-        Log.d(TAG, "Setting up continuous analysis at $frameRate FPS")
-
-        imageAnalyzer?.setAnalyzer(cameraExecutor!!) { imageProxy ->
-            if (!isAnalyzing) {
+    private fun setupFrameAnalyzer(analysis: ImageAnalysis) {
+        analysis.setAnalyzer(cameraExecutor!!) { imageProxy ->
+            val listener = frameListener
+            val now = System.currentTimeMillis()
+            if (listener == null || now - lastFrameTs < frameIntervalMs) {
                 imageProxy.close()
                 return@setAnalyzer
             }
-
-            val bitmap = imageProxy.toBitmap()
-            imageProxy.close()
-
-            // Emit to flow for collection
-            CoroutineScope(Dispatchers.IO).launch {
-                _analysisResults.emit(AnalysisResult(bitmap, "", System.currentTimeMillis()))
+            lastFrameTs = now
+            val bitmap: Bitmap? = try {
+                val raw = imageProxy.toBitmap()
+                val rotation = imageProxy.imageInfo.rotationDegrees
+                if (rotation != 0) {
+                    val matrix = Matrix().apply { postRotate(rotation.toFloat()) }
+                    Bitmap.createBitmap(raw, 0, 0, raw.width, raw.height, matrix, true)
+                } else raw
+            } catch (e: Exception) {
+                Log.e(TAG, "帧转换失败: ${e.message}", e)
+                null
+            } finally {
+                imageProxy.close()
+            }
+            if (bitmap != null) {
+                try {
+                    listener(bitmap)
+                } catch (e: Exception) {
+                    Log.e(TAG, "帧回调异常: ${e.message}", e)
+                }
             }
         }
     }
@@ -202,6 +230,7 @@ class CameraManager(
      */
     fun release() {
         Log.d(TAG, "Releasing camera resources")
+        frameListener = null
         stopContinuousAnalysis()
         try {
             cameraProvider?.unbindAll()

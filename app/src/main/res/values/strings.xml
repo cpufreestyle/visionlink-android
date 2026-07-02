@@ -5,6 +5,10 @@
     <string name="mode_obstacle">Mode 1: Obstacle</string>
     <string name="mode_text">Mode 2: Text</string>
     <string name="mode_scene">Mode 3: Scene</string>
+    <string name="mode_guide">Mode 4: Guide</string>
+    <string name="guide_active">Pointing guide active</string>
+    <string name="guide_stopped">Pointing guide stopped</string>
+    <string name="guide_init_failed">Guide model load failed</string>
     <string name="download_model">Download\nModel</string>
     <string name="init_ai">Init AI</string>
     <string name="check_aicore">Check\nAICore</string>

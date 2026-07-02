@@ -5,6 +5,10 @@
     <string name="mode_obstacle">模式1: 障碍</string>
     <string name="mode_text">模式2: 文字</string>
     <string name="mode_scene">模式3: 场景</string>
+    <string name="mode_guide">模式4: 指向</string>
+    <string name="guide_active">指向引导运行中</string>
+    <string name="guide_stopped">指向引导已停止</string>
+    <string name="guide_init_failed">引导模型加载失败</string>
     <string name="download_model">下载模型</string>
     <string name="init_ai">初始化</string>
     <string name="check_aicore">检测</string>
