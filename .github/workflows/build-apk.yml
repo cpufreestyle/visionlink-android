@@ -37,12 +37,19 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
+      - name: Patch settings.gradle.kts for CI (skip Aliyun mirror)
+        run: |
+          # CI 环境下 Aliyun mirror 常返回 502，改用官方仓库
+          sed -i '/maven.aliyun.com/d' settings.gradle.kts
+          echo "Patched settings.gradle.kts (removed Aliyun mirror)"
+          cat settings.gradle.kts
+
       - name: Build Debug APK
         run: |
-          # Retry up to 3 times on transient mirror failures (e.g. Aliyun 502)
+          # Retry up to 3 times on transient failures
           for i in 1 2 3; do
             echo "=== Build attempt $i ==="
-            if ./gradlew assembleDebug --no-daemon --stacktrace -Dorg.gradle.internal.launcher.exec=false; then
+            if ./gradlew assembleDebug --no-daemon --stacktrace; then
               echo "Build succeeded!"
               exit 0
             fi
