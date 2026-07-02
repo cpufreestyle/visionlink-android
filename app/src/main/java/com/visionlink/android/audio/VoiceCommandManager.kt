@@ -48,7 +48,22 @@ class VoiceCommandManager(
             "场景" to VoiceCommand.MODE_SCENE,
             "描述" to VoiceCommand.MODE_SCENE,
             "scene" to VoiceCommand.MODE_SCENE,
-            
+
+            // 指向引导模式（模式4）
+            "指向引导" to VoiceCommand.MODE_GUIDE,
+            "指向" to VoiceCommand.MODE_GUIDE,
+            "引导" to VoiceCommand.MODE_GUIDE,
+            "guide" to VoiceCommand.MODE_GUIDE,
+            "pointing" to VoiceCommand.MODE_GUIDE,
+
+            // 锁定/取消锁定目标（指向引导模式内）
+            "取消锁定" to VoiceCommand.UNLOCK_TARGET,
+            "解锁" to VoiceCommand.UNLOCK_TARGET,
+            "unlock" to VoiceCommand.UNLOCK_TARGET,
+            "锁定" to VoiceCommand.LOCK_TARGET,
+            "锁定目标" to VoiceCommand.LOCK_TARGET,
+            "lock" to VoiceCommand.LOCK_TARGET,
+
             // 连续检测
             "开始检测" to VoiceCommand.START_CONTINUOUS,
             "持续检测" to VoiceCommand.START_CONTINUOUS,
@@ -72,8 +87,8 @@ class VoiceCommandManager(
         )
         
         // 帮助文本
-        const val HELP_TEXT_ZH = "可用命令：拍照、分析、障碍物模式、读文本、场景描述、开始检测、停止检测、初始化AI、帮助"
-        const val HELP_TEXT_EN = "Commands: take photo, analyze, obstacle mode, read text, scene, start, stop, init AI, help"
+        const val HELP_TEXT_ZH = "可用命令：拍照、分析、障碍物模式、读文本、场景描述、指向引导、锁定、取消锁定、开始检测、停止检测、初始化AI、帮助"
+        const val HELP_TEXT_EN = "Commands: take photo, analyze, obstacle mode, read text, scene, guide, lock, unlock, start, stop, init AI, help"
     }
     
     enum class VoiceCommand {
@@ -81,6 +96,9 @@ class VoiceCommandManager(
         MODE_OBSTACLE,
         MODE_READ_TEXT,
         MODE_SCENE,
+        MODE_GUIDE,
+        LOCK_TARGET,
+        UNLOCK_TARGET,
         START_CONTINUOUS,
         STOP_CONTINUOUS,
         INIT_AI,

@@ -16,6 +16,7 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
 import com.visionlink.android.ai.AIInferenceManager
+import com.visionlink.android.ai.HandGuideManager
 import com.visionlink.android.camera.CameraManager
 import com.visionlink.android.databinding.ActivityMainBinding
 import com.visionlink.android.R
@@ -48,6 +49,12 @@ class MainActivity : AppCompatActivity() {
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var isDestroyed = false
     private var isContinuousMode = false
+    private var continuousJob: Job? = null
+
+    // 模式4: 指向引导（端侧实时手部+物体检测）
+    private var guideManager: HandGuideManager? = null
+    private var isGuideMode = false
+    private var isGuideStarting = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -91,6 +98,7 @@ class MainActivity : AppCompatActivity() {
         binding.btnMode1.setOnClickListener { setMode(1) }
         binding.btnMode2.setOnClickListener { setMode(2) }
         binding.btnMode3.setOnClickListener { setMode(3) }
+        binding.btnMode4.setOnClickListener { toggleGuideMode() }
 
         binding.btnInitAI.setOnClickListener {
             if (!aiManager.isInitialized()) initAI()
@@ -216,26 +224,116 @@ class MainActivity : AppCompatActivity() {
 
     private fun startContinuousDetection() {
         binding.tvStatus.text = getString(com.visionlink.android.R.string.status_continuous_active)
-        scope.launch {
-            try {
-                aiManager.startContinuousInference(
-                    onFrame = { },
-                    onResult = { result ->
-                        if (!isDestroyed) {
-                            runOnUiThreadSafe { binding.tvResult.text = result }
-                            speakSafely(result)
-                        }
+        // 真实的连续检测循环：拍照 → 当前模式分析 → 播报 → 等待，串行执行防止请求堆积
+        continuousJob?.cancel()
+        continuousJob = scope.launch {
+            while (isActive && isContinuousMode && !isDestroyed) {
+                try {
+                    val bitmap = cameraManager.capture()
+                    if (bitmap == null) {
+                        delay(1000)
+                        continue
                     }
-                )
-            } catch (e: Exception) {
-                Log.e(TAG, "Continuous detection error: ${e.message}", e)
+                    val result = aiManager.analyzeImage(bitmap, currentMode)
+                    if (isDestroyed || !isContinuousMode) break
+                    binding.tvResult.text = result
+                    speakSafely(result)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Continuous detection error: ${e.message}", e)
+                }
+                delay(3000) // 每轮间隔，兼顾播报时长与 API 频率
             }
         }
     }
 
     private fun stopContinuousDetection() {
         binding.tvStatus.text = getString(com.visionlink.android.R.string.status_continuous_stopped)
-        aiManager.stopContinuousInference()
+        continuousJob?.cancel()
+        continuousJob = null
+    }
+
+    // ========== 模式4: 指向引导 ==========
+
+    private fun toggleGuideMode() {
+        if (isGuideStarting) return
+        if (isGuideMode) stopGuideMode() else startGuideMode()
+    }
+
+    private fun startGuideMode() {
+        if (isContinuousMode) toggleContinuousMode() // 与连续模式互斥
+        isGuideStarting = true
+        binding.tvAiStatus.text = if (isEnglish) "Loading guide models..." else "加载引导模型中..."
+        speakSafely(if (isEnglish) "Starting pointing guide" else "正在启动指向引导")
+
+        scope.launch {
+            try {
+                val ready = withContext(Dispatchers.IO) {
+                    if (guideManager == null) {
+                        guideManager = HandGuideManager(
+                            this@MainActivity,
+                            onAnnounce = { text ->
+                                if (!isDestroyed) {
+                                    runOnUiThreadSafe { binding.tvResult.text = text }
+                                    speakSafely(text)
+                                    try { glassesManager.sendText(text) } catch (_: Exception) {}
+                                }
+                            },
+                            onStatus = { status ->
+                                runOnUiThreadSafe { binding.tvStatus.text = status }
+                            }
+                        )
+                    }
+                    guideManager!!.initialize()
+                }
+
+                if (!ready) {
+                    binding.tvAiStatus.text = getString(R.string.guide_init_failed)
+                    speakSafely(if (isEnglish) "Guide model load failed" else "引导模型加载失败")
+                    return@launch
+                }
+
+                if (!cameraManager.isCameraStarted()) {
+                    cameraManager.startCamera()
+                    delay(1000)
+                }
+                if (!cameraManager.isCameraStarted()) {
+                    speakSafely(if (isEnglish) "Camera not ready" else "相机未就绪，无法启动引导")
+                    return@launch
+                }
+
+                guideManager!!.start()
+                cameraManager.setFrameListener(250L) { bitmap ->
+                    guideManager?.processFrame(bitmap)
+                }
+
+                isGuideMode = true
+                currentMode = 4
+                updateModeUI()
+                binding.btnMode4.setBackgroundColor(0xFFFF0000.toInt())
+                binding.tvAiStatus.text = getString(R.string.guide_active)
+                speakSafely(
+                    if (isEnglish) "Pointing guide on. Point with your index finger. Say lock to lock a target."
+                    else "指向引导已开启。请将手抬到胸前，用食指指向想去的方向。说锁定，可锁定目标开始引导"
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "Guide mode start failed: ${e.message}", e)
+                binding.tvAiStatus.text = "Error: ${e.message}"
+            } finally {
+                isGuideStarting = false
+            }
+        }
+    }
+
+    private fun stopGuideMode() {
+        cameraManager.setFrameListener(listener = null)
+        guideManager?.stop()
+        isGuideMode = false
+        currentMode = 1
+        updateModeUI()
+        binding.btnMode4.setBackgroundColor(0xFF00BCD4.toInt())
+        binding.tvStatus.text = getString(com.visionlink.android.R.string.status_ready)
+        binding.tvAiStatus.text = getString(R.string.guide_stopped)
+        speakSafely(if (isEnglish) "Pointing guide off" else "指向引导已关闭")
     }
 
     private fun initAI() {
@@ -545,6 +643,14 @@ class MainActivity : AppCompatActivity() {
             VoiceCommandManager.VoiceCommand.MODE_OBSTACLE -> { setMode(1); speakSafely("障碍物模式") }
             VoiceCommandManager.VoiceCommand.MODE_READ_TEXT -> { setMode(2); speakSafely("读文本模式") }
             VoiceCommandManager.VoiceCommand.MODE_SCENE -> { setMode(3); speakSafely("场景描述模式") }
+            VoiceCommandManager.VoiceCommand.MODE_GUIDE -> { if (!isGuideMode) startGuideMode() }
+            VoiceCommandManager.VoiceCommand.LOCK_TARGET -> {
+                if (isGuideMode) guideManager?.lockTarget()
+                else speakSafely("请先说指向引导，进入引导模式")
+            }
+            VoiceCommandManager.VoiceCommand.UNLOCK_TARGET -> {
+                if (isGuideMode) guideManager?.unlockTarget()
+            }
             VoiceCommandManager.VoiceCommand.START_CONTINUOUS -> {
                 if (!isContinuousMode) { toggleContinuousMode() }
             }
@@ -572,7 +678,10 @@ class MainActivity : AppCompatActivity() {
             BleRingManager.RingEvent.DEVICE_DISCONNECTED -> {
                 speakSafely(getString(com.visionlink.android.R.string.ring_disconnected))
             }
-            BleRingManager.RingEvent.TAP_DETECTED -> captureAndAnalyze()
+            BleRingManager.RingEvent.TAP_DETECTED -> {
+                if (isGuideMode) guideManager?.lockTarget() // 引导模式下单击=锁定目标
+                else captureAndAnalyze()
+            }
             BleRingManager.RingEvent.DOUBLE_TAP -> {
                 if (!aiManager.isInitialized()) initAI()
                 else speakSafely(if (isEnglish) "AI already ready" else "AI\u5df2\u5c31\u7eea")
@@ -616,12 +725,14 @@ class MainActivity : AppCompatActivity() {
 
 
     private fun setMode(mode: Int) {
+        if (isGuideMode && mode != 4) stopGuideMode() // 切回模式1-3时先退出指向引导
         currentMode = mode
         updateModeUI()
         val modeName = when (mode) {
             1 -> if (isEnglish) "Obstacle Avoidance" else "障碍物检测"
             2 -> if (isEnglish) "Text Reading" else "文字识别"
             3 -> if (isEnglish) "Scene Description" else "场景描述"
+            4 -> if (isEnglish) "Pointing Guide" else "指向引导"
             else -> if (isEnglish) "Unknown" else "未知"
         }
         speakSafely("Mode: $modeName")
@@ -632,6 +743,7 @@ class MainActivity : AppCompatActivity() {
             1 -> "Obstacle Avoidance"
             2 -> "Text Reading"
             3 -> "Scene Description"
+            4 -> "Pointing Guide"
             else -> "Unknown"
         }
     }
@@ -725,6 +837,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         isDestroyed = true
+        try { guideManager?.release() }     catch (_: Exception) {}
         try { aiManager.release() }        catch (_: Exception) {}
         try { cameraManager.release() }     catch (_: Exception) {}
         try { ttsManager.release() }        catch (_: Exception) {}

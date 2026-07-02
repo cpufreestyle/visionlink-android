@@ -33,6 +33,8 @@ class AIInferenceManager(private val context: Context) {
         private const val MOONSHOT_API_URL = "https://api.moonshot.cn/v1/chat/completions"
         private const val MOONSHOT_API_KEY = "1a5Zv7fDZ4psyGGyTVnHLH7zD7eqap98yWmXfhGvBmDH67TVQQEnvGHsoHSZR2QY0"
         private const val MOONSHOT_MODEL = "moonshot-v1-8k"
+        // 图像分析必须用 vision 模型，普通 moonshot-v1-8k 看不到图像
+        private const val MOONSHOT_VISION_MODEL = "moonshot-v1-8k-vision-preview"
         
         // Google AI Edge LiteRT-LM Configuration
         private const val GEMMA_MODEL_NAME = "gemma-3n-E2B-it-int4"
@@ -281,9 +283,9 @@ class AIInferenceManager(private val context: Context) {
                         return@withContext "图像转换失败"
                     }
 
-                    // 使用 OpenAI 兼容格式（Moonshot API 支持）
+                    // OpenAI 兼容格式 + vision 模型，图像随请求一起发送
                     val jsonBody = JSONObject().apply {
-                        put("model", "moonshot-v1-8k")
+                        put("model", MOONSHOT_VISION_MODEL)
                         put("temperature", TEMPERATURE)
                         put("max_tokens", MAX_TOKENS)
                         put("messages", JSONArray().apply {
@@ -291,17 +293,15 @@ class AIInferenceManager(private val context: Context) {
                                 put("role", "user")
                                 put("content", JSONArray().apply {
                                     put(JSONObject().apply {
+                                        put("type", "image_url")
+                                        put("image_url", JSONObject().apply {
+                                            put("url", "data:image/jpeg;base64,$base64Image")
+                                        })
+                                    })
+                                    put(JSONObject().apply {
                                         put("type", "text")
                                         put("text", prompt)
                                     })
-                                    // 注意：Moonshot API 可能不支持图像输入
-                                    // 如果不支持，只发送文本
-                                    // put(JSONObject().apply {
-                                    //     put("type", "image_url")
-                                    //     put("image_url", JSONObject().apply {
-                                    //         put("url", "data:image/jpeg;base64,$base64Image")
-                                    //     })
-                                    // })
                                 })
                             })
                         })
@@ -485,19 +485,6 @@ class AIInferenceManager(private val context: Context) {
 
             return@withContext "重试次数已用尽"
         }
-
-    suspend fun startContinuousInference(
-        onFrame: suspend (Bitmap) -> Unit,
-        onResult: suspend (String) -> Unit
-    ) {
-        Log.d(TAG, "Continuous inference not yet implemented for Moonshot API")
-        // TODO: Implement continuous mode with Moonshot API
-    }
-
-    fun stopContinuousInference() {
-        Log.d(TAG, "Continuous inference stopped")
-        // TODO: Implement stop logic
-    }
 
     // ========== Prompt Building ==========
 

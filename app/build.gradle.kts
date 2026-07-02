@@ -44,6 +44,13 @@ android {
         viewBinding = true
     }
 
+    testOptions {
+        unitTests.all { test ->
+            // 项目路径含中文（导盲），显式指定测试 worker 编码防止类路径乱码
+            test.jvmArgs("-Dfile.encoding=UTF-8", "-Dsun.jnu.encoding=UTF-8")
+        }
+    }
+
     packaging {
         resources {
             excludes += "/META-INF/DEPENDENCIES"
@@ -76,6 +83,9 @@ dependencies {
 
     // HTTP client for API calls (also used for LM Studio connection)
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+
+    // MediaPipe Tasks Vision: 端侧实时手部关键点 + 物体检测（指向引导模式）
+    implementation("com.google.mediapipe:tasks-vision:0.10.14")
 
     // Google AI Edge LiteRT-LM for on-device LLM inference
     implementation("com.google.ai.edge.litertlm:litertlm-android:latest.release")
