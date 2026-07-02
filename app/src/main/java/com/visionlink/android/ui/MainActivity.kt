@@ -24,6 +24,7 @@ import com.visionlink.android.glasses.CXRGlassesManager
 import com.visionlink.android.audio.TTSManager
 import com.visionlink.android.audio.VoiceCommandManager
 import com.visionlink.android.bluetooth.BleRingManager
+import com.visionlink.android.update.UpdateManager
 import com.visionlink.android.utils.AICoreChecker
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.collectLatest
@@ -56,6 +57,10 @@ class MainActivity : AppCompatActivity() {
     private var isGuideMode = false
     private var isGuideStarting = false
 
+    // 自动更新（GitHub Release）
+    private lateinit var updateManager: UpdateManager
+    private var isUpdating = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
@@ -75,6 +80,59 @@ class MainActivity : AppCompatActivity() {
         setupUI()
         observeAIState()
         checkPermissions()
+        scheduleUpdateCheck()
+    }
+
+    /**
+     * 启动后延迟检查 GitHub Release 更新：发现新版本 → 后台下载 → 语音播报 → 拉起系统安装器。
+     * 检查失败静默跳过，不影响主流程。
+     */
+    private fun scheduleUpdateCheck() {
+        scope.launch {
+            delay(8_000)  // 等 TTS 就绪、避开启动期语音
+            if (isDestroyed || isUpdating) return@launch
+            val info = updateManager.checkForUpdate() ?: return@launch
+            if (isDestroyed) return@launch
+            isUpdating = true
+            Log.i(TAG, "发现新版本 ${info.tagName}，开始下载")
+            speakSafely(
+                if (isEnglish) "New version ${info.versionName} found, downloading in background"
+                else "发现新版本 ${info.versionName}，正在后台下载更新"
+            )
+            binding.tvStatus.text = if (isEnglish) "Updating to ${info.versionName}..." else "正在下载新版本 ${info.versionName}..."
+
+            val apk = updateManager.downloadApk(info) { pct ->
+                if (pct % 10 == 0) runOnUiThreadSafe {
+                    binding.tvStatus.text = if (isEnglish) "Update download: $pct%" else "更新下载中: $pct%"
+                }
+            }
+            if (isDestroyed) return@launch
+            if (apk == null) {
+                isUpdating = false
+                Log.w(TAG, "更新下载失败")
+                speakSafely(if (isEnglish) "Update download failed" else "更新下载失败，下次启动会重试")
+                binding.tvStatus.text = if (isEnglish) "Update failed" else "更新下载失败"
+                return@launch
+            }
+            if (!updateManager.canInstall()) {
+                speakSafely(
+                    if (isEnglish) "Please allow installing apps from this source, then restart the app"
+                    else "请在打开的设置页允许安装应用，然后重新打开本应用完成更新"
+                )
+                updateManager.openInstallPermissionSettings()
+                isUpdating = false  // 授权后下次启动复用已下载文件直接安装
+                return@launch
+            }
+            speakSafely(
+                if (isEnglish) "Download complete, opening installer"
+                else "更新下载完成，即将打开安装界面，请确认安装"
+            )
+            delay(3_000)  // 给播报留时间
+            if (!updateManager.installApk(apk)) {
+                isUpdating = false
+                speakSafely(if (isEnglish) "Failed to open installer" else "打开安装界面失败")
+            }
+        }
     }
 
     private fun initManagers() {
@@ -91,6 +149,7 @@ class MainActivity : AppCompatActivity() {
         voiceManager.setEnglish(isEnglish)
         ttsManager.switchLanguage(isEnglish)
         ringManager = BleRingManager(this) { event -> handleRingEvent(event) }
+        updateManager = UpdateManager(this)
         Log.d(TAG, "All managers initialized")
     }
 
