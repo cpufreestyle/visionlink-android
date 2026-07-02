@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">VisionLink</string>
+    <!-- Main UI -->
+    <string name="mode_obstacle">模式1: 障碍</string>
+    <string name="mode_text">模式2: 文字</string>
+    <string name="mode_scene">模式3: 场景</string>
+    <string name="mode_guide">模式4: 指向</string>
+    <string name="guide_active">指向引导运行中</string>
+    <string name="guide_stopped">指向引导已停止</string>
+    <string name="guide_init_failed">引导模型加载失败</string>
+    <string name="download_model">下载模型</string>
+    <string name="init_ai">初始化</string>
+    <string name="check_aicore">检测</string>
+    <string name="start_continuous">开始</string>
+    <string name="stop_continuous">停止</string>
+    <string name="capture_single">拍照</string>
+    <string name="settings">设置</string>
+    <string name="exit">退出</string>
+    <!-- Status -->
+    <string name="status_ready">就绪</string>
+    <string name="status_initializing">初始化中...</string>
+    <string name="status_analyzing">分析中...</string>
+    <string name="tap_init_ai">点击初始化AI</string>
+    <string name="ai_ready">AI就绪</string>
+    <string name="engine_aicore">引擎: AICore (Gemini Nano)</string>
+    <string name="engine_edge">引擎: Edge (Gemma 4)</string>
+    <string name="engine_litert">引擎: LiteRT-LM (Gemma 4 E2B)</string>
+    <string name="engine_cloud">引擎: 云端 (API)</string>
+    <string name="engine_none">引擎: 未选择</string>
+    <string name="glasses_na">眼镜: 未知</string>
+    <string name="glasses_connected">眼镜: 已连接</string>
+    <string name="glasses_disconnected">眼镜: 未连接</string>
+    <!-- Voice Command -->
+    <string name="voice_listening">正在聆听...</string>
+    <string name="voice_command_matched">收到命令: %s</string>
+    <string name="voice_command_help">说"帮助"查看所有命令</string>
+    <string name="voice_not_available">语音识别不可用</string>
+    <!-- BLE Ring -->
+    <string name="ring_scanning">正在扫描指环...</string>
+    <string name="ring_found">发现指环: %s</string>
+    <string name="ring_connected">指环已连接</string>
+    <string name="ring_disconnected">指环已断开</string>
+    <string name="ring_tap">单击</string>
+    <string name="ring_double_tap">双击</string>
+    <string name="ring_long_press">长按</string>
+    <string name="ring_gesture">手势: %s</string>
+    <!-- Settings Dialog -->
+    <string name="settings_title">设置</string>
+    <string name="settings_language">语言 / Language</string>
+    <string name="settings_lang_chinese">简体中文</string>
+    <string name="settings_lang_english">English</string>
+    <string name="settings_tts_speed">TTS 语速</string>
+    <string name="settings_tts_volume">TTS 音量</string>
+    <string name="settings_fps_limit">帧率限制</string>
+    <string name="settings_close">关闭</string>
+    <!-- TTS -->
+    <string name="tts_not_ready">TTS 引擎未就绪</string>
+    <string name="tts_no_result">请先拍照分析</string>
+    <!-- Permissions -->
+    <string name="perm_camera_rationale">需要相机权限才能使用视觉辅助功能</string>
+    <string name="perm_denied">权限被拒绝</string>
+    <!-- AICore -->
+    <string name="aicore_check_title">AICore 检测结果</string>
+    <string name="aicore_not_checked">未检测到 AICore</string>
+    <string name="aicore_available">AICore 可用</string>
+    <string name="settings_voice_command">语音命令</string>
+    <string name="settings_voice_enable">启用语音控制</string>
+    <string name="settings_ble_ring">蓝牙指环</string>
+    <string name="settings_ring_scan">扫描指环设备</string>
+    <string name="settings_ring_disconnect">断开指环连接</string>
+
+    <string name="tap_init_ai_to_start">点击初始化AI启动</string>
+    <string name="status_continuous_active">连续模式已启动</string>
+    <string name="status_continuous_stopped">连续模式已停止</string>
+    <string name="status_init_ai">AI初始化中...</string>
+    <string name="status_downloading">模型下载中...</string>
+    <string name="status_capturing">拍摄中...</string>
+    <string name="status_capture_failed">拍摄失效</string>
+    <string name="status_analysis_failed">分析失效</string>
+    <string name="ai_model_ready">AI模型就绪。点击拍照分析。</string>
+    <string name="error_prefix">错误:</string>
+    <string name="mode_unknown">未知</string>
+    </resources>

@@ -1,0 +1,77 @@
+name: Build APK
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to build against'
+        required: false
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  build:
+    name: Build and upload APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Gradle cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle.kts', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Patch settings.gradle.kts for CI (skip Aliyun mirror)
+        run: |
+          # CI 环境下 Aliyun mirror 常返回 502，改用官方仓库
+          sed -i '/maven.aliyun.com/d' settings.gradle.kts
+          echo "Patched settings.gradle.kts (removed Aliyun mirror)"
+
+      - name: Build Debug APK
+        run: |
+          # Retry up to 3 times on transient failures
+          for i in 1 2 3; do
+            echo "=== Build attempt $i ==="
+            if ./gradlew assembleDebug --no-daemon --stacktrace; then
+              echo "Build succeeded!"
+              exit 0
+            fi
+            echo "Build attempt $i failed, waiting 30s before retry..."
+            sleep 30
+          done
+          echo "All 3 build attempts failed"
+          exit 1
+
+      - name: Rename APK
+        run: |
+          TAG="${{ github.ref_name }}"
+          cp app/build/outputs/apk/debug/app-debug.apk "visionlink-android-${TAG}.apk"
+          ls -lh "visionlink-android-${TAG}.apk"
+
+      - name: Upload APK to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: visionlink-android-*.apk
+          tag_name: ${{ github.ref_name }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

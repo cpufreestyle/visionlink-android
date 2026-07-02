@@ -1,0 +1,104 @@
+# VisionLink Android - Git 忽略文件
+# 对应 PC 版 .gitignore
+
+# ============ Android 标准忽略 ============
+
+# 编译输出
+/build/
+*/build/
+
+# 本地配置文件
+local.properties
+grandle.properties
+
+# Android Studio 配置
+.idea/
+.gradle/
+*.iml
+*.iws
+*.ipr
+
+# 生成的文件
+captures/
+output.json
+
+# ============ 模型文件 (大文件) ============
+
+# Gemma 4 E2B 模型 (4GB+)
+app/src/main/assets/models/gemma-4-e2b-it.litertlm
+
+# 视觉模型 (.tflite)
+app/src/main/assets/models/mobilenet_v3.tflite
+
+# 模型配置 (自动生成)
+app/src/main/assets/models/model_config.json
+
+# ============ 日志和缓存 ============
+
+# 日志文件
+*.log
+logs/
+
+# 缓存
+.cache/
+*.cache
+
+# ============ 系统文件 ============
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Linux
+*~
+
+# ============ 敏感信息 ============
+
+# 密钥和证书
+*.key
+*.pem
+*.jks
+*.keystore
+
+# CXR-M SDK (如果闭源)
+# libs/cxr-m-sdk.aar
+
+# ============ 测试输出 ============
+
+# 测试报告
+test-results/
+junit-reports/
+
+# ============ 其他 ============
+
+# 临时文件
+tmp/
+temp/
+*.tmp
+
+# 备份文件
+*.bak
+*.backup
+
+# ============ 保留文件 (反忽略) ============
+
+# 保留模型目录结构 (空目录)
+!app/src/main/assets/models/.gitkeep
+
+# 保留 gradle wrapper
+!gradle/wrapper/gradle-wrapper.jar
+!gradle/wrapper/gradle-wrapper.properties
+*.apk
+build/
+.gradle/
+local.properties
+sdk/rokid-app.js
+sdk/rokid-sdk-page.html
+sdk/rokid-sdk-record.json
+sdk/rokid-cxrm/

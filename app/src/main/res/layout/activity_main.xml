@@ -1,0 +1,221 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout 
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/main_layout"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#000000"
+    tools:context=".ui.MainActivity">
+
+    <!-- Camera Preview -->
+    <androidx.camera.view.PreviewView
+        android:id="@+id/previewView"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <!-- ROI Focus Frame -->
+    <View
+        android:id="@+id/roiFrame"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:background="@drawable/roi_frame"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <!-- Top Status Bar -->
+    <LinearLayout
+        android:id="@+id/topStatusBar"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:background="@android:color/transparent"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="8dp"
+        android:paddingEnd="8dp"
+        android:paddingTop="12dp"
+        android:paddingBottom="8dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <TextView
+            android:id="@+id/tvMode"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/mode_obstacle"
+            android:textColor="#00FF00"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tvStatus"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:text="@string/status_ready"
+            android:textColor="#FFFFFF"
+            android:textSize="14sp" />
+
+        <!-- AI Status -->
+        <TextView
+            android:id="@+id/tvAiStatus"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:layout_weight="1"
+            android:gravity="end"
+            android:text="@string/tap_init_ai"
+            android:textColor="#FF9800"
+            android:textSize="13sp" />
+
+        <!-- FPS Display -->
+        <TextView
+            android:id="@+id/tvFps"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:text="FPS: 0"
+            android:textColor="#00FF00"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:visibility="gone" />
+
+    </LinearLayout>
+
+    <!-- Result Display -->
+    <ScrollView
+        android:id="@+id/resultScroll"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_margin="12dp"
+        android:background="@android:color/transparent"
+        app:layout_constraintBottom_toTopOf="@+id/bottomControls"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/topStatusBar">
+
+        <TextView
+            android:id="@+id/tvResult"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:padding="8dp"
+            android:textColor="#FFFFFF"
+            android:textSize="14sp" />
+
+    </ScrollView>
+
+    <!-- Bottom Control Bar -->
+    <HorizontalScrollView
+        android:id="@+id/bottomControls"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:background="#80000000"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:orientation="horizontal"
+            android:padding="8dp">
+
+            <Button android:id="@+id/btnMode1" style="@style/Widget.Material3.Button"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_margin="2dp" android:backgroundTint="#FF0000"
+                android:text="@string/mode_obstacle" android:textColor="#FFFFFF" android:textSize="12sp" />
+
+            <Button android:id="@+id/btnMode2" style="@style/Widget.Material3.Button"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_margin="2dp" android:backgroundTint="#FFAA00"
+                android:text="@string/mode_text" android:textColor="#FFFFFF" android:textSize="12sp" />
+
+            <Button android:id="@+id/btnMode3" style="@style/Widget.Material3.Button"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_margin="2dp" android:backgroundTint="#0000FF"
+                android:text="@string/mode_scene" android:textColor="#FFFFFF" android:textSize="12sp" />
+
+            <Button android:id="@+id/btnMode4" style="@style/Widget.Material3.Button"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_margin="2dp" android:backgroundTint="#00BCD4"
+                android:text="@string/mode_guide" android:textColor="#FFFFFF" android:textSize="12sp" />
+
+            <Button android:id="@+id/btnDownloadModel" style="@style/Widget.Material3.Button"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_margin="2dp" android:backgroundTint="#9C27B0"
+                android:text="@string/download_model" android:textColor="#FFFFFF" android:textSize="12sp" />
+
+            <Button android:id="@+id/btnInitAI" style="@style/Widget.Material3.Button"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_margin="2dp" android:backgroundTint="#FF9800"
+                android:text="@string/init_ai" android:textColor="#FFFFFF" android:textSize="12sp" />
+
+            <Button android:id="@+id/btnCheckAICore" style="@style/Widget.Material3.Button"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_margin="2dp" android:backgroundTint="#9C27B0"
+                android:text="@string/check_aicore" android:textColor="#FFFFFF" android:textSize="12sp" />
+
+            <Button android:id="@+id/btnContinuous" style="@style/Widget.Material3.Button"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_margin="2dp" android:backgroundTint="#00AA00"
+                android:text="@string/start_continuous" android:textColor="#FFFFFF" android:textSize="12sp" />
+
+            <Button android:id="@+id/btnCapture" style="@style/Widget.Material3.Button"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_margin="2dp" android:backgroundTint="#2196F3"
+                android:text="@string/capture_single" android:textColor="#FFFFFF" android:textSize="12sp" />
+
+            <Button android:id="@+id/btnSettings" style="@style/Widget.Material3.Button"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_margin="2dp" android:backgroundTint="#607D8B"
+                android:text="@string/settings" android:textColor="#FFFFFF" android:textSize="12sp" />
+
+            <Button android:id="@+id/btnTestApi" style="@style/Widget.Material3.Button"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_margin="2dp" android:backgroundTint="#880088"
+                android:text="Test API" android:textColor="#FFFFFF" android:textSize="12sp" />
+
+            <Button android:id="@+id/btnTestLm" style="@style/Widget.Material3.Button"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_margin="2dp" android:backgroundTint="#006600"
+                android:text="Test LM" android:textColor="#FFFFFF" android:textSize="12sp" />
+
+
+            <Button android:id="@+id/btnTestEdge" style="@style/Widget.Material3.Button"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_margin="2dp" android:backgroundTint="#E65100"
+                android:text="Test EDGE" android:textColor="#FFFFFF" android:textSize="12sp" />
+
+            <Button android:id="@+id/btnExit" style="@style/Widget.Material3.Button"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_margin="2dp" android:backgroundTint="#666666"
+                android:text="@string/exit" android:textColor="#FFFFFF" android:textSize="12sp" />
+
+        </LinearLayout>
+
+    </HorizontalScrollView>
+
+    <!-- Glasses Status -->
+    <TextView
+        android:id="@+id/tvGlassesStatus"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_margin="8dp"
+        android:background="@android:color/transparent"
+        android:padding="4dp"
+        android:text="@string/glasses_na"
+        android:textColor="#FF0000"
+        android:textSize="12sp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/topStatusBar" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>

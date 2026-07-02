@@ -1,0 +1,268 @@
+﻿<link rel="stylesheet" href="https://custom.rokid.com/prod/rokid_web/editor/style.css"><div class="stackedit__html" style="font-size: 17px;"><h1 id="androidsdk-å¯¼å¥">Androidï¼SDK å¯¼å¥</h1>
+<h2 id="æ¦è¿°">æ¦è¿°</h2>
+<p>å¨ææº Android å·¥ç¨ä¸­å¼å¥ CXR-L å®¢æ·ç«¯åºï¼<code>client-l</code>ï¼ï¼éç½® Maven ä»åºä¸æä½ç³»ç»çæ¬ï¼ä½¿åºç¨è½å¤è°ç¨ <code>CXRLink</code> åéå¥ APIã</p>
+<h2 id="åç½®æ¡ä»¶">åç½®æ¡ä»¶</h2>
+<ul>
+<li>Android Studioï¼Gradle Kotlin DSL æ Groovy åå¯ã</li>
+<li>è®¾å¤ææ¨¡æå¨æ»¡è¶³ <strong>minSdk 31</strong>ï¼Android 12+ï¼ã</li>
+<li>ç½ç»å¯è®¿é® Rokid Maven å¬åºã</li>
+<li>ææºå·²å®è£ <strong>Rokid AI App â¥ 1.7.14</strong>ï¼å¤§éï¼æ <strong>Hi Rokid</strong>ï¼æµ·å¤ï¼ï¼ç¨äºé´æã</li>
+</ul>
+<h2 id="ä»åºéç½®">ä»åºéç½®</h2>
+<p>å¨å·¥ç¨æ ¹ç®å½ <code>settings.gradle.kts</code> ç <code>dependencyResolutionManagement.repositories</code> ä¸­å å¥ï¼</p>
+<pre><code class="language-kotlin">maven { url = uri(&quot;https://maven.rokid.com/repository/maven-public/&quot;) }
+</code></pre>
+<p>åæ¶ä¿ç <code>google()</code>ã<code>mavenCentral()</code> ç­å¸¸ç¨ä»åºã</p>
+<h2 id="ä¾èµå£°æ">ä¾èµå£°æ</h2>
+<p>å¨ <code>app/build.gradle.kts</code> ç <code>dependencies</code> ä¸­ï¼</p>
+<pre><code class="language-kotlin">implementation(&quot;com.rokid.cxr:client-l:1.0.3&quot;)
+</code></pre>
+<h2 id="application-ä¸å¨å±è¿æ¥">Application ä¸å¨å±è¿æ¥</h2>
+<p><code>CXRLink</code> å®ä¾å¨ä¼è¯çå½å¨æååºå¨å±å¤ç¨ãæ¨èå¨ <code>Application</code> ä¸­ææåä¾å¼ç¨ï¼ä¾é´æåçä¼è¯é¡µä¸å­è½åé¡µå±äº«ï¼</p>
+<pre><code class="language-kotlin">class MyApplication : Application() {
+    var sharedLink: CXRLink? = null
+
+    fun resetSession() {
+        sharedLink = null
+    }
+}
+</code></pre>
+<p>å¨ <code>AndroidManifest.xml</code> æ³¨åï¼</p>
+<pre><code class="language-xml">&lt;application android:name=&quot;.MyApplication&quot; ...&gt;
+</code></pre>
+<p><strong>æ³¨æ</strong>ï¼<code>namespace</code> / <code>applicationId</code> ä¸ºä½ èªæåºç¨ååï¼ä¸ <code>CUSTOMAPP</code> ä¼è¯éç½®çç¼éç«¯ç®æ ååæ å³ã</p>
+<h2 id="æéä¸æ¸åå¿é">æéä¸æ¸åï¼å¿éï¼</h2>
+<p>RenewCXRLSample ä¸ CXR-L éæé¡»å£°æä»¥ä¸æéï¼æè½åè£åªæ¶ï¼<strong>è³å°ä¿ç <code>INTERNET</code></strong>ï¼CustomApp å®è£è·¯å¾æ¶åå¬å±å­å¨æ¶é¡»è¡¥é½å­å¨ç¸å³æéã</p>
+<table>
+<thead>
+<tr><th>æé</th><th>å¿éæ§</th><th>ç¨é</th></tr>
+</thead>
+<tbody>
+<tr><td><code>INTERNET</code></td><td><strong>å¿é</strong></td><td>SDK ç½ç»éä¿¡</td></tr>
+<tr><td><code>MANAGE_MEDIA</code></td><td>æ¨è</td><td>åªä½/æä»¶è®¿é®ï¼Sample å·²å£°æï¼</td></tr>
+<tr><td><code>MANAGE_EXTERNAL_STORAGE</code></td><td>CustomApp è¯»å¬å±ç®å½ APK æ¶ <strong>å¿é</strong></td><td>Android 11+ è®¿é®å¬å±å­å¨ä¸­ç <code>cxrL.apk</code></td></tr>
+<tr><td><code>READ_EXTERNAL_STORAGE</code>ï¼<code>maxSdkVersion=32</code>ï¼</td><td>Android 12 åä»¥ä¸è¯»å¤é¨å­å¨æ¶ <strong>å¿é</strong></td><td>è¯»åå¬å±ç®å½ APK</td></tr>
+</tbody>
+</table>
+<h3 id="customappå®è£-apk-åçè¿è¡æ¶æé">CustomAppï¼å®è£ APK åçè¿è¡æ¶æé</h3>
+<p>ä»å¬å±è·¯å¾ï¼å¦ <code>/sdcard/DCIM/Rokid/cxrL.apk</code>ï¼è¯»å APK å¹¶è°ç¨ <code>appUploadAndInstall</code> åï¼é¡»ï¼</p>
+<ol>
+<li><strong>Android 11+ï¼API 30+ï¼</strong>ï¼å¼å¯¼ç¨æ·æäºãæææä»¶è®¿é®ã(<code>Environment.isExternalStorageManager()</code>)ã</li>
+<li><strong>Android 6â12</strong>ï¼è¯·æ± <code>READ_EXTERNAL_STORAGE</code> è¿è¡æ¶æéã</li>
+<li><strong>åºç¨ä¸å±ç®å½</strong>ï¼å¦ <code>getExternalFilesDir(&quot;DCIM/Rokid&quot;)</code>ï¼éå¸¸æ éä¸è¿°æéï¼<strong>æ¨èä¼åä½¿ç¨</strong>ã</li>
+</ol>
+<p>è°ç¨ <code>appUploadAndInstall</code> ååºç¡®è®¤ç®æ æä»¶ <code>exists()</code>ã<code>canRead()</code>ï¼ä¸å¬å±è·¯å¾å·²æ»¡è¶³å­å¨æéï¼Sample ä½¿ç¨ <code>ApkInstallAccess</code> æ ¡éªï¼ã</p>
+<p>è¥éåäº«æ¬å°æä»¶ï¼å¦é³é¢ WAVï¼ï¼å¯éç½® <code>FileProvider</code>ï¼</p>
+<pre><code class="language-xml">&lt;provider
+    android:name=&quot;androidx.core.content.FileProvider&quot;
+    android:authorities=&quot;${applicationId}.fileprovider&quot;
+    android:exported=&quot;false&quot;
+    android:grantUriPermissions=&quot;true&quot;&gt;
+    &lt;meta-data
+        android:name=&quot;android.support.FILE_PROVIDER_PATHS&quot;
+        android:resource=&quot;@xml/file_paths&quot; /&gt;
+&lt;/provider&gt;
+</code></pre>
+<h2 id="åæ­¥ä¸éªè¯">åæ­¥ä¸éªè¯</h2>
+<ol>
+<li>æ§è¡ Gradle Syncï¼ç¡®è®¤æ ä¾èµè§£æéè¯¯ã</li>
+<li>ä»»ææºç æä»¶ä¸­å¯æå <code>import com.rokid.cxr.link.CXRLink</code>ã</li>
+</ol>
+<h2 id="ä¸ä¸æ­¥">ä¸ä¸æ­¥</h2>
+<p>å®æå¯¼å¥åï¼ç»§ç»­é´æè·å <code>token</code>ï¼åè¿å¥è¿æ¥ä¸ä¼è¯ã</p>
+<h2 id="éå½å¯¹ç§å·¥ç¨">éå½ï¼å¯¹ç§å·¥ç¨</h2>
+<p>å®æ¹ç¤ºä¾å·¥ç¨ RenewCXRLSampleï¼<code>com.rokid.renewcxrlsample</code>ï¼å¯åè <code>settings.gradle.kts</code>ã<code>app/build.gradle.kts</code> ä¸ <code>CXRLApplication.kt</code>ãç¤ºä¾å·¥ç¨å SDK çæ¬å¯è½ä¸ææ¡£åå¸çæ¬ä¸åï¼<strong>éææ¶ä»¥æ¬æ <code>1.0.3</code> ä¸ºå</strong>ã</p>
+<h2 id="ç¼éç«¯cxr-s-sdk-å¯¼å¥">ç¼éç«¯ï¼CXR-S SDK å¯¼å¥</h2>
+<p>å¨ç¼éç«¯ Android å·¥ç¨ä¸­å¼å¥ <strong>CXR-S</strong> å®¢æ·ç«¯åºï¼Maven æä»¶ <code>cxr-service-bridge</code>ï¼ï¼ä½¿åºç¨è½å¤è°ç¨ <code>CXRServiceBridge</code> å <code>Caps</code> APIãææºä¾§ä½¿ç¨ä¸æ <code>client-l</code>ï¼<strong>å¿å¨ææº App ä¸­å¼å¥ <code>cxr-service-bridge</code></strong>ã</p>
+<h3 id="ä¾èµå£°æ-1">ä¾èµå£°æ</h3>
+<p>å¨ç¼éç«¯ <code>app/build.gradle.kts</code> ç <code>dependencies</code> ä¸­ï¼</p>
+<pre><code class="language-kotlin">implementation(&quot;com.rokid.cxr:cxr-service-bridge:1.0-20260417.063502-103&quot;)
+</code></pre>
+<blockquote>
+<p><strong>çæ¬è¯´æ</strong>ï¼ææ¡£ä»¥ CXRSWithCXRLSample å¿«ç§åæ ä¸ºä¾ï¼æ­£å¼åå¸çæ¬è¯·ä»¥ Sample å·¥ç¨ <code>build.gradle.kts</code> ä¸åå¸è¯´æä¸ºåã</p>
+</blockquote>
+<h3 id="androidmanifest">AndroidManifest</h3>
+<p>CXRSWithCXRLSample æ¸åè¾ä¸ºç²¾ç®ï¼</p>
+<ul>
+<li>å£°æå¥å£ <code>MainActivity</code>ï¼<code>android:exported=&quot;true&quot;</code>ï¼ã</li>
+<li><strong>æ </strong> CXR ç¸å³é¢å¤æéï¼éè¿/è§¦æ§æ¿ç³»ç»å¹¿æ­å¨è¿è¡æ¶éè¿ <code>registerReceiver</code> æ³¨åã</li>
+</ul>
+<pre><code class="language-xml">&lt;application ...&gt;
+    &lt;activity
+        android:name=&quot;.activities.main.MainActivity&quot;
+        android:exported=&quot;true&quot;
+        ...&gt;
+        &lt;intent-filter&gt;
+            &lt;action android:name=&quot;android.intent.action.MAIN&quot; /&gt;
+            &lt;category android:name=&quot;android.intent.category.LAUNCHER&quot; /&gt;
+        &lt;/intent-filter&gt;
+    &lt;/activity&gt;
+&lt;/application&gt;
+</code></pre>
+<h3 id="åå§åæ¶æº">åå§åæ¶æº</h3>
+<p><code>CXRServiceBridge</code> åºå¨ CustomApp è¢«ææº <code>appStart</code> æèµ·åå°½æ©å®æï¼</p>
+<ol>
+<li><code>setStatusListener(StatusListener)</code> â çå¬è¿æ¥ç¶æã</li>
+<li><code>subscribe(clientKey, MsgCallback)</code> â è®¢éææºä¸åçèªå®ä¹æä»¤ééã</li>
+</ol>
+<p>è¯¦è§èªå®ä¹æä»¤ä¸ç« ãSample å¨ <code>MainViewModel.init</code> ä¸­å®æä¸è¿°ä¸¤æ­¥ã</p>
+<h3 id="çº¦æ">çº¦æ</h3>
+<ul>
+<li><code>applicationId</code> é¡»ä¸ææºç«¯ <code>CUSTOMAPP</code> ä¼è¯éç½®ç <code>packageName</code> ä¸è´ã</li>
+<li>SDK çæ¬é¡»ä¸ææºç«¯ <code>client-l</code> åç¼éç³»ç»çæ¬å¼å®¹ï¼åçº§æ¶ä¸¤ç«¯åæ­¥éªè¯ã</li>
+</ul>
+<h3 id="éå½å¯¹ç§å·¥ç¨-1">éå½ï¼å¯¹ç§å·¥ç¨</h3>
+<p>CXRSWithCXRLSampleï¼<code>app/build.gradle.kts</code>ï¼<code>minSdk = 31</code>ãä¾èµåæ ï¼ã<code>app/src/main/AndroidManifest.xml</code>ã</p></div><script>var markdown ="# Androidï¼SDK å¯¼å¥
+
+## æ¦è¿°
+
+å¨ææº Android å·¥ç¨ä¸­å¼å¥ CXR-L å®¢æ·ç«¯åºï¼`client-l`ï¼ï¼éç½® Maven ä»åºä¸æä½ç³»ç»çæ¬ï¼ä½¿åºç¨è½å¤è°ç¨ `CXRLink` åéå¥ APIã
+
+## åç½®æ¡ä»¶
+
+- Android Studioï¼Gradle Kotlin DSL æ Groovy åå¯ã
+- è®¾å¤ææ¨¡æå¨æ»¡è¶³ **minSdk 31**ï¼Android 12+ï¼ã
+- ç½ç»å¯è®¿é® Rokid Maven å¬åºã
+- ææºå·²å®è£ **Rokid AI App â¥ 1.7.14**ï¼å¤§éï¼æ **Hi Rokid**ï¼æµ·å¤ï¼ï¼ç¨äºé´æã
+
+## ä»åºéç½®
+
+å¨å·¥ç¨æ ¹ç®å½ `settings.gradle.kts` ç `dependencyResolutionManagement.repositories` ä¸­å å¥ï¼
+
+```kotlin
+maven { url = uri("https://maven.rokid.com/repository/maven-public/") }
+```
+
+åæ¶ä¿ç `google()`ã`mavenCentral()` ç­å¸¸ç¨ä»åºã
+
+## ä¾èµå£°æ
+
+å¨ `app/build.gradle.kts` ç `dependencies` ä¸­ï¼
+
+```kotlin
+implementation("com.rokid.cxr:client-l:1.0.3")
+```
+
+## Application ä¸å¨å±è¿æ¥
+
+`CXRLink` å®ä¾å¨ä¼è¯çå½å¨æååºå¨å±å¤ç¨ãæ¨èå¨ `Application` ä¸­ææåä¾å¼ç¨ï¼ä¾é´æåçä¼è¯é¡µä¸å­è½åé¡µå±äº«ï¼
+
+```kotlin
+class MyApplication : Application() {
+    var sharedLink: CXRLink? = null
+
+    fun resetSession() {
+        sharedLink = null
+    }
+}
+```
+
+å¨ `AndroidManifest.xml` æ³¨åï¼
+
+```xml
+<application android:name=".MyApplication" ...>
+```
+
+**æ³¨æ**ï¼`namespace` / `applicationId` ä¸ºä½ èªæåºç¨ååï¼ä¸ `CUSTOMAPP` ä¼è¯éç½®çç¼éç«¯ç®æ ååæ å³ã
+
+## æéä¸æ¸åï¼å¿éï¼
+
+RenewCXRLSample ä¸ CXR-L éæé¡»å£°æä»¥ä¸æéï¼æè½åè£åªæ¶ï¼**è³å°ä¿ç `INTERNET`**ï¼CustomApp å®è£è·¯å¾æ¶åå¬å±å­å¨æ¶é¡»è¡¥é½å­å¨ç¸å³æéã
+
+| æé | å¿éæ§ | ç¨é |
+| --- | --- | --- |
+| `INTERNET` | **å¿é** | SDK ç½ç»éä¿¡ |
+| `MANAGE_MEDIA` | æ¨è | åªä½/æä»¶è®¿é®ï¼Sample å·²å£°æï¼ |
+| `MANAGE_EXTERNAL_STORAGE` | CustomApp è¯»å¬å±ç®å½ APK æ¶ **å¿é** | Android 11+ è®¿é®å¬å±å­å¨ä¸­ç `cxrL.apk` |
+| `READ_EXTERNAL_STORAGE`ï¼`maxSdkVersion=32`ï¼ | Android 12 åä»¥ä¸è¯»å¤é¨å­å¨æ¶ **å¿é** | è¯»åå¬å±ç®å½ APK |
+
+### CustomAppï¼å®è£ APK åçè¿è¡æ¶æé
+
+ä»å¬å±è·¯å¾ï¼å¦ `/sdcard/DCIM/Rokid/cxrL.apk`ï¼è¯»å APK å¹¶è°ç¨ `appUploadAndInstall` åï¼é¡»ï¼
+
+1. **Android 11+ï¼API 30+ï¼**ï¼å¼å¯¼ç¨æ·æäºãæææä»¶è®¿é®ã(`Environment.isExternalStorageManager()`)ã
+2. **Android 6â12**ï¼è¯·æ± `READ_EXTERNAL_STORAGE` è¿è¡æ¶æéã
+3. **åºç¨ä¸å±ç®å½**ï¼å¦ `getExternalFilesDir("DCIM/Rokid")`ï¼éå¸¸æ éä¸è¿°æéï¼**æ¨èä¼åä½¿ç¨**ã
+
+è°ç¨ `appUploadAndInstall` ååºç¡®è®¤ç®æ æä»¶ `exists()`ã`canRead()`ï¼ä¸å¬å±è·¯å¾å·²æ»¡è¶³å­å¨æéï¼Sample ä½¿ç¨ `ApkInstallAccess` æ ¡éªï¼ã
+
+è¥éåäº«æ¬å°æä»¶ï¼å¦é³é¢ WAVï¼ï¼å¯éç½® `FileProvider`ï¼
+
+```xml
+<provider
+    android:name="androidx.core.content.FileProvider"
+    android:authorities="${applicationId}.fileprovider"
+    android:exported="false"
+    android:grantUriPermissions="true">
+    <meta-data
+        android:name="android.support.FILE_PROVIDER_PATHS"
+        android:resource="@xml/file_paths" />
+</provider>
+```
+
+## åæ­¥ä¸éªè¯
+
+1. æ§è¡ Gradle Syncï¼ç¡®è®¤æ ä¾èµè§£æéè¯¯ã
+2. ä»»ææºç æä»¶ä¸­å¯æå `import com.rokid.cxr.link.CXRLink`ã
+
+## ä¸ä¸æ­¥
+
+å®æå¯¼å¥åï¼ç»§ç»­é´æè·å `token`ï¼åè¿å¥è¿æ¥ä¸ä¼è¯ã
+
+## éå½ï¼å¯¹ç§å·¥ç¨
+
+å®æ¹ç¤ºä¾å·¥ç¨ RenewCXRLSampleï¼`com.rokid.renewcxrlsample`ï¼å¯åè `settings.gradle.kts`ã`app/build.gradle.kts` ä¸ `CXRLApplication.kt`ãç¤ºä¾å·¥ç¨å SDK çæ¬å¯è½ä¸ææ¡£åå¸çæ¬ä¸åï¼**éææ¶ä»¥æ¬æ `1.0.3` ä¸ºå**ã
+
+## ç¼éç«¯ï¼CXR-S SDK å¯¼å¥
+
+å¨ç¼éç«¯ Android å·¥ç¨ä¸­å¼å¥ **CXR-S** å®¢æ·ç«¯åºï¼Maven æä»¶ `cxr-service-bridge`ï¼ï¼ä½¿åºç¨è½å¤è°ç¨ `CXRServiceBridge` å `Caps` APIãææºä¾§ä½¿ç¨ä¸æ `client-l`ï¼**å¿å¨ææº App ä¸­å¼å¥ `cxr-service-bridge`**ã
+
+### ä¾èµå£°æ
+
+å¨ç¼éç«¯ `app/build.gradle.kts` ç `dependencies` ä¸­ï¼
+
+```kotlin
+implementation("com.rokid.cxr:cxr-service-bridge:1.0-20260417.063502-103")
+```
+
+> **çæ¬è¯´æ**ï¼ææ¡£ä»¥ CXRSWithCXRLSample å¿«ç§åæ ä¸ºä¾ï¼æ­£å¼åå¸çæ¬è¯·ä»¥ Sample å·¥ç¨ `build.gradle.kts` ä¸åå¸è¯´æä¸ºåã
+
+### AndroidManifest
+
+CXRSWithCXRLSample æ¸åè¾ä¸ºç²¾ç®ï¼
+
+- å£°æå¥å£ `MainActivity`ï¼`android:exported="true"`ï¼ã
+- **æ ** CXR ç¸å³é¢å¤æéï¼éè¿/è§¦æ§æ¿ç³»ç»å¹¿æ­å¨è¿è¡æ¶éè¿ `registerReceiver` æ³¨åã
+
+```xml
+<application ...>
+    <activity
+        android:name=".activities.main.MainActivity"
+        android:exported="true"
+        ...>
+        <intent-filter>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent-filter>
+    </activity>
+</application>
+```
+
+### åå§åæ¶æº
+
+`CXRServiceBridge` åºå¨ CustomApp è¢«ææº `appStart` æèµ·åå°½æ©å®æï¼
+
+1. `setStatusListener(StatusListener)` â çå¬è¿æ¥ç¶æã
+2. `subscribe(clientKey, MsgCallback)` â è®¢éææºä¸åçèªå®ä¹æä»¤ééã
+
+è¯¦è§èªå®ä¹æä»¤ä¸ç« ãSample å¨ `MainViewModel.init` ä¸­å®æä¸è¿°ä¸¤æ­¥ã
+
+### çº¦æ
+
+- `applicationId` é¡»ä¸ææºç«¯ `CUSTOMAPP` ä¼è¯éç½®ç `packageName` ä¸è´ã
+- SDK çæ¬é¡»ä¸ææºç«¯ `client-l` åç¼éç³»ç»çæ¬å¼å®¹ï¼åçº§æ¶ä¸¤ç«¯åæ­¥éªè¯ã
+
+### éå½ï¼å¯¹ç§å·¥ç¨
+
+CXRSWithCXRLSampleï¼`app/build.gradle.kts`ï¼`minSdk = 31`ãä¾èµåæ ï¼ã`app/src/main/AndroidManifest.xml`ã
+";</script>

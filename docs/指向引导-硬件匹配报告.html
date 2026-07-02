@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VisionLink 指向引导 · 概念框架与 Rokid Glasses 硬件匹配报告</title>
+<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital@0;1&family=Noto+Serif+SC:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;700&family=Space+Mono&display=swap" rel="stylesheet">
+<style>
+:root {
+  --text-primary: #14231b; --text-secondary: #49695a; --text-tertiary: #5d7168;
+  --text-on-dark: #f3eee5; --text-on-dark-muted: rgba(243,238,229,0.72); --text-on-dark-subtle: rgba(243,238,229,0.44);
+  --bg-page: #f7f5f0; --bg-surface: #eef2ea; --bg-surface-alt: #f1f3ea;
+  --bg-dark: #275846; --bg-darker: #314e3f;
+  --accent-primary: #cadf4c; --accent-secondary: #cb6d41; --accent-tertiary: #adc87a;
+  --border-subtle: #c7d0c5; --border-emphasis: rgba(73,89,57,0.10);
+  --font-serif: "Noto Serif SC","Source Han Serif SC",Georgia,serif;
+  --font-display: "EB Garamond","Noto Serif SC",Georgia,serif;
+  --font-sans: "Noto Sans SC","Source Han Sans SC",system-ui,sans-serif;
+  --font-mono: "Space Mono","JetBrains Mono",monospace;
+  --space-xs: 8px; --space-sm: 16px; --space-md: 24px; --space-lg: 36px; --space-xl: 48px; --space-2xl: 80px;
+  --radius-sm: 12px; --radius-md: 18px; --radius-lg: 24px; --radius-full: 999px;
+  --shadow-lg: 0 18px 42px rgba(20,35,27,0.10); --shadow-md: 0 18px 40px rgba(31,55,44,0.06);
+  --shadow-inset: inset 0 0 0 1px rgba(73,89,57,0.10);
+  --glow-primary: 0 0 0 6px rgba(208,223,82,0.06);
+  --ease-natural: cubic-bezier(0.22,0.68,0.35,1);
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:var(--bg-page); color:var(--text-primary); font-family:var(--font-sans); line-height:1.85; }
+.wrap { max-width:1080px; margin:0 auto; padding:0 var(--space-lg); }
+
+/* 封面 */
+.cover { padding:var(--space-2xl) 0; position:relative; overflow:hidden; }
+.cover .mono-tag { font-family:var(--font-mono); font-size:11px; letter-spacing:0.18em; text-transform:uppercase; color:var(--text-secondary); }
+.cover h1 { font-family:var(--font-serif); font-size:44px; font-weight:600; line-height:1.3; margin:var(--space-sm) 0; }
+.cover h1 em { font-family:var(--font-display); font-style:italic; color:var(--accent-secondary); }
+.cover .sub { font-size:16px; color:var(--text-tertiary); max-width:640px; }
+.cover-meta { display:grid; grid-template-columns:repeat(4,1fr); gap:var(--space-sm); margin-top:var(--space-xl); }
+.meta-card { background:var(--bg-surface); border-radius:var(--radius-md); padding:var(--space-sm) var(--space-md); box-shadow:var(--shadow-inset); }
+.meta-card .k { font-family:var(--font-mono); font-size:10px; letter-spacing:0.15em; text-transform:uppercase; color:var(--text-secondary); }
+.meta-card .v { font-family:var(--font-serif); font-size:15px; margin-top:4px; }
+.geo { position:absolute; right:-40px; top:40px; opacity:0.6; }
+
+/* 章节 */
+section { padding:var(--space-2xl) 0 var(--space-md); }
+.chapter-head { display:flex; align-items:baseline; gap:var(--space-sm); margin-bottom:var(--space-lg); }
+.chapter-head .num { font-family:var(--font-mono); font-size:13px; color:var(--accent-secondary); }
+.chapter-head .line { width:36px; height:1px; background:var(--border-subtle); align-self:center; }
+.chapter-head h2 { font-family:var(--font-serif); font-size:30px; font-weight:500; }
+.chapter-head h2 em { font-family:var(--font-display); font-style:italic; color:var(--text-secondary); font-size:20px; margin-left:8px; }
+h3.editorial { font-size:11px; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; color:var(--text-secondary); margin:var(--space-lg) 0 var(--space-sm); display:flex; align-items:center; gap:10px; }
+h3.editorial::before { content:""; width:24px; height:2px; background:var(--accent-secondary); }
+p.lead { font-size:16px; color:var(--text-secondary); max-width:760px; margin-bottom:var(--space-md); }
+
+/* 卡片 */
+.cards-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:var(--space-sm); }
+.card { background:var(--bg-surface); border-radius:var(--radius-md); padding:var(--space-md); box-shadow:var(--shadow-inset); transition:all 0.4s var(--ease-natural); }
+.card:hover { transform:translateY(-3px); box-shadow:var(--shadow-lg); }
+.card h4 { font-family:var(--font-serif); font-size:17px; font-weight:600; margin-bottom:8px; }
+.card p { font-size:13.5px; color:var(--text-secondary); }
+.card .mono-num { font-family:var(--font-mono); font-size:30px; color:var(--text-primary); }
+.card .mono-num b { color:var(--accent-secondary); font-weight:400; }
+
+/* 表格 */
+.data-table { width:100%; border-collapse:collapse; margin:var(--space-sm) 0; background:#fff; border-radius:var(--radius-md); overflow:hidden; box-shadow:var(--shadow-inset); }
+.data-table th { font-family:var(--font-mono); font-size:10.5px; letter-spacing:0.12em; text-transform:uppercase; text-align:left; color:var(--text-secondary); padding:12px 16px; border-bottom:1px solid var(--border-subtle); background:var(--bg-surface-alt); }
+.data-table td { padding:12px 16px; font-size:13.5px; border-bottom:1px solid var(--border-emphasis); vertical-align:top; }
+.data-table tr:hover td { background:rgba(202,223,76,0.06); }
+.data-table .num { font-family:var(--font-mono); }
+.pill { display:inline-block; font-family:var(--font-mono); font-size:10.5px; padding:2px 12px; border-radius:var(--radius-full); }
+.pill.ok { background:rgba(202,223,76,0.25); color:#3d5220; }
+.pill.warn { background:rgba(203,109,65,0.14); color:var(--accent-secondary); }
+.pill.info { background:rgba(73,105,90,0.12); color:var(--text-secondary); }
+.pill.done { background:var(--bg-dark); color:var(--accent-primary); }
+
+/* 深绿金句区 */
+.dark-block { background:var(--bg-dark); color:var(--text-on-dark); border-radius:var(--radius-lg); padding:var(--space-xl); margin:var(--space-lg) 0; }
+.dark-block .quote { font-family:var(--font-serif); font-size:24px; line-height:1.7; }
+.dark-block .quote em { font-family:var(--font-display); font-style:italic; color:var(--accent-primary); }
+.dark-block .by { font-family:var(--font-mono); font-size:11px; letter-spacing:0.15em; color:var(--text-on-dark-subtle); margin-top:var(--space-sm); text-transform:uppercase; }
+
+/* 流程图 */
+.flow { display:flex; flex-wrap:wrap; gap:10px; align-items:stretch; margin:var(--space-sm) 0; }
+.flow .node { background:#fff; border-radius:var(--radius-sm); padding:12px 16px; box-shadow:var(--shadow-inset); min-width:130px; flex:1; }
+.flow .node .t { font-family:var(--font-mono); font-size:10px; color:var(--accent-secondary); letter-spacing:0.1em; text-transform:uppercase; }
+.flow .node .n { font-family:var(--font-serif); font-size:14.5px; font-weight:600; margin-top:2px; }
+.flow .node .d { font-size:12px; color:var(--text-tertiary); margin-top:4px; line-height:1.55; }
+.flow .arrow { display:flex; align-items:center; font-family:var(--font-mono); color:var(--accent-tertiary); font-size:18px; }
+.flow .node.dark { background:var(--bg-dark); color:var(--text-on-dark); }
+.flow .node.dark .n { color:var(--accent-primary); }
+.flow .node.dark .d { color:var(--text-on-dark-muted); }
+
+/* 风险卡 */
+.risk-card { background:rgba(203,109,65,0.07); border-left:3px solid var(--accent-secondary); border-radius:0 var(--radius-sm) var(--radius-sm) 0; padding:var(--space-sm) var(--space-md); margin:10px 0; }
+.risk-card h4 { font-family:var(--font-serif); font-size:15px; margin-bottom:4px; }
+.risk-card p { font-size:13px; color:var(--text-secondary); }
+
+/* 清单 */
+.checklist { counter-reset: chk; list-style:none; }
+.checklist li { counter-increment: chk; padding:14px 0 14px 52px; position:relative; border-bottom:1px solid var(--border-emphasis); }
+.checklist li::before { content:counter(chk,decimal-leading-zero); position:absolute; left:0; top:16px; font-family:var(--font-mono); font-size:13px; color:var(--accent-secondary); }
+.checklist li b { font-family:var(--font-serif); font-weight:600; }
+.checklist li span { display:block; font-size:13px; color:var(--text-secondary); }
+
+/* 引用卡 */
+.quote-card { background:var(--bg-surface); border-left:3px solid var(--accent-secondary); border-radius:0 var(--radius-sm) var(--radius-sm) 0; padding:var(--space-sm) var(--space-md); margin:var(--space-sm) 0; font-family:var(--font-serif); font-size:14.5px; font-style:italic; color:var(--text-secondary); }
+
+.footer { padding:var(--space-xl) 0 var(--space-2xl); color:var(--text-tertiary); font-size:12.5px; border-top:1px solid var(--border-emphasis); margin-top:var(--space-2xl); }
+.footer .mono { font-family:var(--font-mono); font-size:10.5px; letter-spacing:0.12em; }
+a { color:var(--text-secondary); }
+
+.reveal { opacity:0; transform:translateY(20px); transition:all 0.7s var(--ease-natural); }
+.reveal.on { opacity:1; transform:none; }
+
+@media (max-width:768px) {
+  .wrap { padding:0 var(--space-sm); }
+  .cover h1 { font-size:30px; }
+  .cover-meta { grid-template-columns:1fr 1fr; }
+  .geo { display:none; }
+  .flow { flex-direction:column; }
+  .flow .arrow { transform:rotate(90deg); justify-content:center; }
+}
+</style>
+</head>
+<body>
+
+<!-- 封面 -->
+<header class="cover">
+  <div class="wrap">
+    <div class="mono-tag">VisionLink Android · Pointing-Guide Feasibility Report · 2026-07-02</div>
+    <h1>指向引导系统<br>概念框架与 <em>Rokid Glasses</em> 硬件匹配报告</h1>
+    <p class="sub">让盲人用"手指"代替视线：摄像头看见手 → 解析指向 → 锁定锚点 → 实时播报"还差几米、往左还是往右"。本报告给出已落地的端侧实现、锚点测距方案，并逐项核对 Rokid Glasses（GPASS 大赛指定硬件）能否撑起这套体验。</p>
+    <div class="cover-meta">
+      <div class="meta-card"><div class="k">项目</div><div class="v">VisionLink v4.9.1 → v5.0</div></div>
+      <div class="meta-card"><div class="k">新增代码</div><div class="v">2 个引擎模块 + 23 项单测全过</div></div>
+      <div class="meta-card"><div class="k">目标硬件</div><div class="v">Rokid Glasses（骁龙 AR1）</div></div>
+      <div class="meta-card"><div class="k">结论</div><div class="v">核心能力全匹配 · 2 项待真机验证</div></div>
+    </div>
+    <svg class="geo" width="300" height="260" viewBox="0 0 300 260" fill="none">
+      <circle cx="190" cy="90" r="70" stroke="#adc87a" stroke-width="1"/>
+      <rect x="60" y="120" width="120" height="120" rx="18" fill="#eef2ea"/>
+      <line x1="40" y1="230" x2="270" y2="30" stroke="#c7d0c5" stroke-width="1"/>
+      <circle cx="190" cy="90" r="5" fill="#cadf4c"/>
+      <circle cx="98" cy="182" r="4" fill="#cb6d41"/>
+    </svg>
+  </div>
+</header>
+
+<main class="wrap">
+
+<!-- 一、项目体检 -->
+<section class="reveal">
+  <div class="chapter-head"><span class="num">01</span><span class="line"></span><h2>项目体检<em>What we found & fixed</em></h2></div>
+  <p class="lead">动手加功能前先通读了全部 3300 行 Kotlin。整体架构（手机主控、眼镜从端、多推理引擎切换）是健康的，但存在若干"看起来能用、实际是空壳或坏路"的问题，本轮已当场修复四项。</p>
+
+  <table class="data-table">
+    <tr><th>#</th><th>问题</th><th>严重度</th><th>状态</th><th>说明</th></tr>
+    <tr><td class="num">1</td><td><b>避障模式的图像根本没发给 AI</b></td><td><span class="pill warn">致命</span></td><td><span class="pill done">已修复</span></td><td>Moonshot 请求里 image_url 被整段注释掉，模型只收到文字 prompt——"识别前方障碍物"实为凭空编造。已改用 vision 模型并真实发送图像。</td></tr>
+    <tr><td class="num">2</td><td><b>连续检测是空壳</b></td><td><span class="pill warn">高</span></td><td><span class="pill done">已修复</span></td><td>startContinuousInference() 是 TODO 空函数，按钮点了显示"运行中"但什么都不做。已实现真实的 拍照→分析→播报 串行循环（3 秒/轮）。</td></tr>
+    <tr><td class="num">3</td><td><b>TTS 中文包缺失时永久哑掉</b></td><td><span class="pill warn">高</span></td><td><span class="pill done">已修复</span></td><td>初始化回退英文的分支忘了置 isInitialized，导致 TTS 从此不发声——对盲人应用是致命路径。</td></tr>
+    <tr><td class="num">4</td><td><b>单元测试从未能编译</b></td><td><span class="pill info">中</span></td><td><span class="pill done">已修复</span></td><td>AIInferenceManagerTest 用了 instrumented 依赖却放在 test/ 目录。已移到 androidTest/ 归位。</td></tr>
+    <tr><td class="num">5</td><td><b>API Key 硬编码在源码并已入库</b></td><td><span class="pill warn">高</span></td><td><span class="pill info">待处理</span></td><td>Moonshot 两处不同 Key 明文写在 AIInferenceManager.kt。建议尽快在 Moonshot 后台吊销换新，并迁到 local.properties/BuildConfig。</td></tr>
+    <tr><td class="num">6</td><td><b>README 与实现脱节</b></td><td><span class="pill info">低</span></td><td><span class="pill info">待处理</span></td><td>宣称"全离线"但默认引擎是云端 Moonshot；宣称 ROI 裁剪 25%-75% 但代码是整图缩放；FPS 显示是假数字。</td></tr>
+  </table>
+</section>
+
+<!-- 二、指向引导系统 -->
+<section class="reveal">
+  <div class="chapter-head"><span class="num">02</span><span class="line"></span><h2>指向引导系统<em>已落地实现</em></h2></div>
+  <p class="lead">新增"模式4：指向引导"。核心思路是把<b>眼睛（摄像头）与手（食指）</b>组成一套指点语言：摄像头持续看画面，手一抬进画面就被捕捉，食指方向延长成一条射线，射线打中什么，就播报什么、在哪、多远。</p>
+
+  <div class="flow">
+    <div class="node"><div class="t">采集</div><div class="n">相机帧 4 FPS</div><div class="d">CameraX 实时帧回调，旋转矫正，忙碌自动丢帧</div></div>
+    <div class="arrow">→</div>
+    <div class="node"><div class="t">感知 · 端侧</div><div class="n">MediaPipe 双模型</div><div class="d">手部 21 关键点 (7.8MB) + EfficientDet 物体检测 (4.6MB)，全离线</div></div>
+    <div class="arrow">→</div>
+    <div class="node"><div class="t">决策</div><div class="n">GuidanceEngine</div><div class="d">指向射线求交 · 锚点锁定跟踪 · 走廊障碍 · 单目测距</div></div>
+    <div class="arrow">→</div>
+    <div class="node dark"><div class="t">输出</div><div class="n">节流语音播报</div><div class="d">TTS + 眼镜 HUD，状态变化才开口，不刷屏</div></div>
+  </div>
+
+  <h3 class="editorial">四层判断逻辑</h3>
+  <div class="cards-grid">
+    <div class="card"><h4>① 手在哪</h4><p>食指指尖落在画面九宫格哪一区（"画面左侧""画面中央"），手出现/移出有去抖播报。</p></div>
+    <div class="card"><h4>② 指向什么</h4><p>食指掌关节→指尖延长为射线，与所有检测框求交，取最近命中："您指向椅子，正前方，大约三到五步。"自动排除用户自己的身体。</p></div>
+    <div class="card"><h4>③ 锁定锚点</h4><p>说"锁定"（或指环单击）把当前指向的物体设为锚点，跨帧跟踪（同类别 + IoU/中心距匹配），丢失 10 帧播报"目标暂时丢失"，重现播报"重新找到"。</p></div>
+    <div class="card"><h4>④ 路径引导</h4><p>持续播报转向指令＋剩余距离："目标门，请稍向右，还剩约6米，大约10步。路径上有椅子偏左，建议靠右通过。"</p></div>
+  </div>
+
+  <h3 class="editorial">播报节流 — 实时但不聒噪</h3>
+  <p class="lead">每帧都算，但只有<b>状态指纹</b>（目标/方向档位/米数档位/障碍集合）变化且距上次播报 ≥1.8 秒才开口；锁定状态每 6 秒兜底重报一次；锁定/丢失/手出现等事件插队立即播报。这是"实时感"和"信息轰炸"之间的平衡点。</p>
+</section>
+
+<!-- 三、锚点与测距 -->
+<section class="reveal">
+  <div class="chapter-head"><span class="num">03</span><span class="line"></span><h2>锚点与米数<em>你提出的方案，这样落地</em></h2></div>
+  <p class="lead">"在屏幕上的目标点放一个锚点，行走时报告前后左右还差多少米"——分两级实现。<b>第一级已写进代码</b>：目标锁定即是锚点，配合单目测距给出米数；<b>第二级是升级路线</b>：ARCore 空间锚点，目标出画面也不丢。</p>
+
+  <h3 class="editorial">第一级 · 已实现：尺寸先验单目测距</h3>
+  <div class="dark-block">
+    <div class="quote">距离 ≈ 物体真实高度 ÷ ( 2 × 框高占画面比 × tan(<em>垂直视场角</em> / 2) )</div>
+    <div class="by">Pinhole camera model · 29 类常见物体高度先验（门 2.0m · 人 1.65m · 椅子 0.85m …）</div>
+  </div>
+  <table class="data-table">
+    <tr><th>能力</th><th>播报示例</th><th>实时行为</th></tr>
+    <tr><td>前后（距离）</td><td class="num">"还剩约6米，大约10步"</td><td>走近→框变大→米数每 0.5m 档位刷新，自动触发播报</td></tr>
+    <tr><td>左右（方向）</td><td class="num">"请稍向右，再直走" / "请向左转"</td><td>锚点中心偏离画面中线换档即播报</td></tr>
+    <tr><td>路径障碍</td><td class="num">"路径上有背包偏左，建议靠右通过"</td><td>用户→锚点的梯形走廊内实时扫描</td></tr>
+    <tr><td>手势↔锚点关系</td><td class="num">"手指偏离目标，请向右调整"</td><td>射线与锚点框求交 + 叉积判左右</td></tr>
+  </table>
+  <p class="lead" style="font-size:13.5px">诚实标注：单目测距误差约 ±30%，且依赖物体类别有高度先验；无先验类别退回"框高→步数"分档估计。所有措辞刻意带"约"。</p>
+
+  <h3 class="editorial">第二级 · 升级路线：ARCore 空间锚点（未实现，方案已评估）</h3>
+  <p class="lead">骁龙 AR1 的眼镜不跑 ARCore，但<b>手机端</b>可以：ARCore 运动跟踪给出手机 6DoF 位姿，在目标处打真实空间锚点后，即使目标出画面，也能持续报"锚点在你右后方 3 米"。代价是相机管线要从 CameraX 迁到 ARCore 共享会话，工程量约一周，且与"眼镜摄像头做帧源"的形态互斥（ARCore 只认手机自己的相机）。建议：眼镜路线跑通后再评估是否需要。</p>
+</section>
+
+<!-- 四、硬件匹配 -->
+<section class="reveal">
+  <div class="chapter-head"><span class="num">04</span><span class="line"></span><h2>硬件匹配度<em>Rokid Glasses × 功能需求</em></h2></div>
+  <p class="lead">GPASS 大赛（蚂蚁集团 × Rokid × 雷鸟创新，builderx.csdn.net/activity-site/gpassdev）指定硬件为 Rokid AI 眼镜（前 100 名团队可免费借用）。逐项核对其规格与 CXR SDK 能力：</p>
+
+  <h3 class="editorial">Rokid Glasses 规格（公开资料汇总）</h3>
+  <div class="cards-grid">
+    <div class="card"><div class="mono-num">AR1</div><p>高通骁龙 AR1 平台，2GB RAM + 32GB ROM——只做采集/显示/音频，AI 推理放手机，正是本项目"手机主控"架构</p></div>
+    <div class="card"><div class="mono-num">12<b>MP</b></div><p>1200 万像素摄像头，第一视角拍摄，带拍摄指示灯</p></div>
+    <div class="card"><div class="mono-num">49<b>g</b></div><p>整机重量，全天佩戴可行；单绿色 MicroLED + 双目衍射光波导，1000nits</p></div>
+    <div class="card"><div class="mono-num">4<b>h</b></div><p>210mAh 标称续航 4 小时（拆机实测宣称 6h），充电盒可回充 10 次</p></div>
+  </div>
+
+  <h3 class="editorial">能力逐项核对（CXR SDK · CxrApi）</h3>
+  <table class="data-table">
+    <tr><th>我们需要</th><th>眼镜/SDK 提供</th><th>匹配</th><th>备注</th></tr>
+    <tr><td>连续实时帧（≥4 FPS）喂 MediaPipe</td><td class="num">setCameraPreviewCallback()<br>720p@30fps · WiFi P2P · &lt;200ms</td><td><span class="pill ok">强匹配</span></td><td>30fps 远超我们 4fps 需求；帧到手机后走现有 processFrame() 管线，核心代码零改动</td></tr>
+    <tr><td>第一视角 + 手自然入镜</td><td>眼镜摄像头即用户视线方向</td><td><span class="pill ok">强匹配</span></td><td>比手机方案质变：盲人无需"举着手机对准前方"，抬手指路即入镜——"眼睛和手"概念的理想形态</td></tr>
+    <tr><td>语音播报到耳边</td><td class="num">sendTtsContent()</td><td><span class="pill ok">强匹配</span></td><td>开放式扬声器，不堵耳道（盲人依赖环境音，入耳式是禁忌）</td></tr>
+    <tr><td>锁定确认物理键</td><td class="num">setAiEventListener() AI 按键</td><td><span class="pill ok">强匹配</span></td><td>镜腿按键/触控 = "锁定"，比语音更快更可靠</td></tr>
+    <tr><td>HUD 文字（家属/低视力辅助）</td><td class="num">openCustomView(JSON)</td><td><span class="pill ok">匹配</span></td><td>盲人本人用不到，但调试与陪同者监看有价值</td></tr>
+    <tr><td>拍照单帧分析（模式1-3）</td><td class="num">takeGlassPhoto(w,h,q)</td><td><span class="pill ok">匹配</span></td><td>现有避障/读字/场景三模式可直接切眼镜视角</td></tr>
+    <tr><td>整日续航</td><td>连续视频流走 WiFi P2P（高耗电）</td><td><span class="pill warn">部分</span></td><td>连续引导实际估 1.5~2.5h（推断值，需实测）；建议"按需引导"用法：平时待机，指路时启动</td></tr>
+    <tr><td>测距参数标定</td><td>眼镜摄像头 FOV 与手机不同</td><td><span class="pill warn">需标定</span></td><td>GuidanceEngine 的 verticalFovDeg 已做成构造参数，换帧源改一个数</td></tr>
+  </table>
+
+  <div class="risk-card"><h4>⚠ 待真机验证 #1：client-l 是否开放预览流</h4><p>本项目依赖 com.rokid.cxr:client-l:1.0.3；公开教程演示 setCameraPreviewCallback 的都是 client-m（CXR-M SDK）。若 L 版（Lite）阉割了连续预览流，降级方案：takeGlassPhoto 轮询（约 1~2fps，实时感下降但功能成立），或升级依赖到 client-m。这是拿到真机后第一件要验证的事。</p></div>
+  <div class="risk-card"><h4>⚠ 待真机验证 #2：MediaPipe 在目标手机上的实际帧率</h4><p>双模型（手部+检测）单帧约 80~150ms（中端机 CPU 估计）。若不够，可降到 320px 输入或启用 GPU delegate。当前管线已有忙碌丢帧保护，慢只会降频不会崩。</p></div>
+</section>
+
+<!-- 五、实时性预算 -->
+<section class="reveal">
+  <div class="chapter-head"><span class="num">05</span><span class="line"></span><h2>实时性预算<em>端到端延迟拆账</em></h2></div>
+  <table class="data-table">
+    <tr><th>环节</th><th>手机摄像头方案（已跑通）</th><th>眼镜摄像头方案（目标形态）</th></tr>
+    <tr><td>帧获取</td><td class="num">~0 ms（本机 CameraX）</td><td class="num">&lt;200 ms（WiFi P2P 推流）</td></tr>
+    <tr><td>MediaPipe 双模型推理</td><td class="num">80~150 ms</td><td class="num">80~150 ms（同在手机跑）</td></tr>
+    <tr><td>GuidanceEngine 决策</td><td class="num">&lt;5 ms（纯计算）</td><td class="num">&lt;5 ms</td></tr>
+    <tr><td>TTS 开口</td><td class="num">~200 ms</td><td class="num">~200 ms + 蓝牙音频</td></tr>
+    <tr><td><b>端到端体感</b></td><td class="num"><b>≈ 0.3~0.4 s</b></td><td class="num"><b>≈ 0.5~0.7 s</b></td></tr>
+  </table>
+  <p class="lead">结论：两种形态都在"实时引导"可用区间（业界导盲辅助普遍以 &lt;1s 为可用线）。真正的节奏控制不在算力而在播报策略——已由节流指纹机制保证。</p>
+</section>
+
+<!-- 六、大赛匹配 -->
+<section class="reveal">
+  <div class="chapter-head"><span class="num">06</span><span class="line"></span><h2>GPASS 大赛匹配<em>两条参赛姿势</em></h2></div>
+  <p class="lead">大赛评审 6 维度中，本项目天然强项是<b>眼镜原生（25%）</b>——指向引导离开第一视角摄像头就不成立；<b>产品创新（20%）</b>——"手指即光标"的盲人交互目前未见同类；<b>社会价值</b>叙事完整。需要注意的错位：</p>
+  <table class="data-table">
+    <tr><th>路线</th><th>形态</th><th>优势</th><th>限制</th></tr>
+    <tr><td><b>A · 百宝箱智能体</b>（符合赛道 1-3 提交要求）</td><td>把"指向引导"简化为工作流：眼镜拍照 → 云端视觉大模型解析手+场景 → 返回播报文本</td><td>平台有模拟调试、无真机也能提交；开发快</td><td>工作流是"单轮拍照问答"范式，连续 4fps 实时引导大概率做不到——实时性降级为"指一下问一次"</td></tr>
+    <tr><td><b>B · 端侧 App</b>（本项目现路线）</td><td>CXR SDK 直连 + MediaPipe 端侧推理，全离线实时</td><td>真实时、零流量、隐私好，技术护城河深</td><td>是否符合赛道提交形态需与主办方确认；可作为赛道四（无显示 AI 眼镜也适配——纯语音交互）候选</td></tr>
+  </table>
+  <p class="lead">建议：<b>报名时 A、B 并行</b>——用 A 交一个能过评审的工作流版本（核心 prompt 逻辑可以直接从 GuidanceEngine 的播报措辞移植），用 B 做现场 demo 的杀手锏。报名截止 7 月 6 日，前 100 名团队可免费借真机，借到即可完成上面两项真机验证。</p>
+</section>
+
+<!-- 七、验证证据 -->
+<section class="reveal">
+  <div class="chapter-head"><span class="num">07</span><span class="line"></span><h2>验证证据<em>本轮改动的自证</em></h2></div>
+  <ol class="checklist">
+    <li><b>Kotlin 编译通过</b><span>gradlew :app:compileDebugKotlin → BUILD SUCCESSFUL（MediaPipe 0.10.14 依赖解析成功，新增 GuidanceEngine.kt / HandGuideManager.kt 及全部接线零错误）</span></li>
+    <li><b>单元测试 23 / 23 通过</b><span>GuidanceEngineTest：射线求交、自身排除、方位/步数/米数分档、走廊障碍与排序、对齐提示、锁定-丢失-重获全流程、节流防刷屏、单目测距随行走变化。测试还真实抓出一个 bug（紧急播报吞掉后续状态播报）并已修复。因项目路径含中文，Gradle test worker 起不来（环境问题），改用 java 直跑 JUnit 通道验证：OK (23 tests)</span></li>
+    <li><b>APK 完整打包成功</b><span>gradlew :app:assembleDebug → app-debug.apk 144MB（含 hand_landmarker.task 7.8MB + efficientdet_lite0.tflite 4.6MB 及 MediaPipe native 库）</span></li>
+    <li><b>诚实清单——未做/待做</b><span>① 未在真机上跑过（本机无 Android 设备）；② 眼镜帧源接入（CxrApi 预览流 → processFrame）代码未写，等真机与 client-l 能力确认；③ ARCore 空间锚点为评估方案未实现；④ API Key 泄露风险待用户处理；⑤ 英文界面下引导播报仍为中文。</span></li>
+  </ol>
+</section>
+
+<!-- 八、路线图 -->
+<section class="reveal">
+  <div class="chapter-head"><span class="num">08</span><span class="line"></span><h2>下一步<em>按依赖序</em></h2></div>
+  <div class="flow">
+    <div class="node"><div class="t">Step 1 · 立即</div><div class="n">真机自测</div><div class="d">手机装 APK，验证模式4 全流程 + MediaPipe 实际帧率</div></div>
+    <div class="arrow">→</div>
+    <div class="node"><div class="t">Step 2 · 7月6日前</div><div class="n">GPASS 报名</div><div class="d">A/B 双路线报名 + 申请借用 Rokid Glasses</div></div>
+    <div class="arrow">→</div>
+    <div class="node"><div class="t">Step 3 · 拿到眼镜</div><div class="n">帧源切换</div><div class="d">验证 client-l 预览流 → CxrApi 帧接入 processFrame + FOV 标定</div></div>
+    <div class="arrow">→</div>
+    <div class="node dark"><div class="t">Step 4 · 迭代</div><div class="n">体验打磨</div><div class="d">真实盲人用户测试 · 播报节奏调优 · （可选）ARCore 锚点</div></div>
+  </div>
+</section>
+
+<div class="footer">
+  <div class="mono">SOURCES</div>
+  <p>GPASS 大赛：builderx.csdn.net/activity-site/gpassdev（蚂蚁集团×Rokid×雷鸟创新 · 报名截止 2026-07-06）· Rokid Glasses 规格：腾讯新闻/艾邦AR/知乎拆机（骁龙AR1 · 12MP · 49g · 210mAh · 单绿MicroLED双目衍射光波导 · ¥2499）· CXR SDK 能力：Rokid 开发者社区实战文章（CxrApi：setCameraPreviewCallback / takeGlassPhoto / sendTtsContent / openCustomView / setAiEventListener）· 本项目代码与测试：E:\claude code\导盲\visionlink-android</p>
+  <p style="margin-top:8px">VisionLink · 指向引导概念框架与硬件匹配报告 · 生成于 2026-07-02 · 数据截至当日公开资料，待真机验证项已显式标注</p>
+</div>
+
+</main>
+
+<script>
+const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { e.target.classList.add('on'); io.unobserve(e.target); } }), { threshold: 0.08 });
+document.querySelectorAll('.reveal').forEach(el => io.observe(el));
+</script>
+</body>
+</html>
