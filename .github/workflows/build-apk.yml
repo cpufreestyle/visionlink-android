@@ -10,6 +10,10 @@ on:
         description: 'Tag to build against'
         required: false
 
+permissions:
+  contents: write
+  id-token: write
+
 jobs:
   build:
     name: Build and upload APK
@@ -42,7 +46,6 @@ jobs:
           # CI 环境下 Aliyun mirror 常返回 502，改用官方仓库
           sed -i '/maven.aliyun.com/d' settings.gradle.kts
           echo "Patched settings.gradle.kts (removed Aliyun mirror)"
-          cat settings.gradle.kts
 
       - name: Build Debug APK
         run: |
@@ -63,6 +66,7 @@ jobs:
         run: |
           TAG="${{ github.ref_name }}"
           cp app/build/outputs/apk/debug/app-debug.apk "visionlink-android-${TAG}.apk"
+          ls -lh "visionlink-android-${TAG}.apk"
 
       - name: Upload APK to Release
         uses: softprops/action-gh-release@v2
