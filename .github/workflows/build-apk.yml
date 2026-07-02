@@ -4,6 +4,11 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to build against'
+        required: false
 
 jobs:
   build:
@@ -33,7 +38,19 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build Debug APK
-        run: ./gradlew assembleDebug --no-daemon
+        run: |
+          # Retry up to 3 times on transient mirror failures (e.g. Aliyun 502)
+          for i in 1 2 3; do
+            echo "=== Build attempt $i ==="
+            if ./gradlew assembleDebug --no-daemon --stacktrace -Dorg.gradle.internal.launcher.exec=false; then
+              echo "Build succeeded!"
+              exit 0
+            fi
+            echo "Build attempt $i failed, waiting 30s before retry..."
+            sleep 30
+          done
+          echo "All 3 build attempts failed"
+          exit 1
 
       - name: Rename APK
         run: |
