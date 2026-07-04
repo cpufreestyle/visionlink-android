@@ -97,6 +97,24 @@ class MainActivity : AppCompatActivity() {
         ringManager = BleRingManager(this) { event -> handleRingEvent(event) }
         voicePrintManager = VoicePrintManager(this)
         voicePrintManager.initialize()
+
+        // 声纹门控：受保护命令需先验证身份
+        voiceManager.voicePrintGate = { command, execute ->
+            if (voicePrintManager.getEnrolledCount() > 0 && voicePrintManager.isReady()) {
+                speakSafely("请先验证身份")
+                voicePrintManager.startVerification(voicePrintManager.getEnrolledUsers().firstOrNull()?.userId ?: "") { result ->
+                    if (result.isMatch) {
+                        execute()
+                    } else {
+                        speakSafely("身份验证失败")
+                    }
+                }
+            } else {
+                // 未注册声纹，直接执行
+                execute()
+            }
+        }
+
         Log.d(TAG, "All managers initialized (voicePrint: ${voicePrintManager.isReady()})")
     }
 
@@ -592,8 +610,9 @@ class MainActivity : AppCompatActivity() {
             prefs.edit().putBoolean("isEnglish", isEnglish).apply()
         }
 
-        // TTS 语速/音调
-        // ttsManager 可能有 setRate/setPitch 方法，具体取决于 TTSManager 实现
+        // TTS 语速/音调 (v5.0: 真正生效)
+        ttsManager.setSpeechRate(user.ttsRate)
+        ttsManager.setPitch(user.ttsPitch)
 
         speakSafely("欢迎回来，${user.name}")
         Log.i(TAG, "Applied preferences for ${user.name}: mode=${user.preferredMode}, en=${user.isEnglish}")
@@ -702,10 +721,13 @@ class MainActivity : AppCompatActivity() {
 
     private fun handleVoiceCommand(command: VoiceCommandManager.VoiceCommand) {
         Log.d(TAG, "Voice command: $command")
-        speakSafely("收到命令")
 
         when (command) {
-            VoiceCommandManager.VoiceCommand.CAPTURE_ANALYZE -> captureAndAnalyze()
+            // === 原有命令 ===
+            VoiceCommandManager.VoiceCommand.CAPTURE_ANALYZE -> {
+                speakSafely("正在拍照分析")
+                captureAndAnalyze()
+            }
             VoiceCommandManager.VoiceCommand.MODE_OBSTACLE -> { setMode(1); speakSafely("障碍物模式") }
             VoiceCommandManager.VoiceCommand.MODE_READ_TEXT -> { setMode(2); speakSafely("读文本模式") }
             VoiceCommandManager.VoiceCommand.MODE_SCENE -> { setMode(3); speakSafely("场景描述模式") }
@@ -718,20 +740,68 @@ class MainActivity : AppCompatActivity() {
                 if (isGuideMode) guideManager?.unlockTarget()
             }
             VoiceCommandManager.VoiceCommand.START_CONTINUOUS -> {
-                if (!isContinuousMode) { toggleContinuousMode() }
+                if (!isContinuousMode) { toggleContinuousMode(); speakSafely("已开启连续检测") }
             }
             VoiceCommandManager.VoiceCommand.STOP_CONTINUOUS -> {
-                if (isContinuousMode) { toggleContinuousMode() }
+                if (isContinuousMode) { toggleContinuousMode(); speakSafely("已停止连续检测") }
             }
-            VoiceCommandManager.VoiceCommand.INIT_AI -> { if (!aiManager.isInitialized()) initAI() }
+            VoiceCommandManager.VoiceCommand.INIT_AI -> {
+                speakSafely("正在初始化AI")
+                if (!aiManager.isInitialized()) initAI()
+            }
             VoiceCommandManager.VoiceCommand.HELP -> speakSafely(voiceManager.getHelpText())
+
+            // === v5.0 新增命令 ===
+            VoiceCommandManager.VoiceCommand.VOLUME_UP -> {
+                ttsManager.volumeUp()
+                speakSafely("音量已调大")
+            }
+            VoiceCommandManager.VoiceCommand.VOLUME_DOWN -> {
+                ttsManager.volumeDown()
+                speakSafely("音量已调小")
+            }
+            VoiceCommandManager.VoiceCommand.SPEED_UP -> {
+                val newRate = (ttsManager.getSpeechRate() + 0.2f).coerceIn(0.5f, 2.0f)
+                ttsManager.setSpeechRate(newRate)
+                speakSafely("语速已调快")
+            }
+            VoiceCommandManager.VoiceCommand.SPEED_DOWN -> {
+                val newRate = (ttsManager.getSpeechRate() - 0.2f).coerceIn(0.5f, 2.0f)
+                ttsManager.setSpeechRate(newRate)
+                speakSafely("语速已调慢")
+            }
+            VoiceCommandManager.VoiceCommand.REPEAT -> {
+                val last = lastSpokenText
+                if (last != null) {
+                    speakSafely("重复：$last")
+                } else {
+                    speakSafely("没有需要重复的内容")
+                }
+            }
+            VoiceCommandManager.VoiceCommand.PAUSE -> {
+                ttsManager.stop()
+                speakSafely("已暂停")
+            }
+            VoiceCommandManager.VoiceCommand.RESUME -> {
+                speakSafely("已恢复")
+            }
+            VoiceCommandManager.VoiceCommand.SWITCH_USER -> {
+                speakSafely("正在识别身份")
+                autoIdentifyUser()
+            }
+            VoiceCommandManager.VoiceCommand.ENROLL_VOICEPRINT -> {
+                openVoicePrintDialog()
+            }
+            VoiceCommandManager.VoiceCommand.CLOSE -> {
+                speakSafely("再见")
+                finish()
+            }
             VoiceCommandManager.VoiceCommand.UNKNOWN -> {
-                // 未知命令时尝试声纹识别
                 if (voicePrintManager.getEnrolledCount() > 0) {
                     speakSafely("正在识别身份")
                     autoIdentifyUser()
                 } else {
-                    speakSafely("未知命令，请说帮助")
+                    speakSafely("未识别，请说帮助")
                 }
             }
         }
@@ -822,7 +892,11 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private var lastSpokenText: String? = null
+
     private fun speakSafely(text: String) {
+        lastSpokenText = text
+        voiceManager.setLastSpokenText(text)
         try { ttsManager.speak(text) } catch (e: Exception) { Log.w(TAG, "TTS error: ${e.message}") }
     }
 
