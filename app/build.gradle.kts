@@ -81,8 +81,8 @@ dependencies {
     implementation("androidx.camera:camera-view:1.4.0")
 
     // Coroutines
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0")
 
     // Rokid CXR-L SDK
     implementation("com.rokid.cxr:client-l:1.0.3")
