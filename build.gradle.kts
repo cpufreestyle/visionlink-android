@@ -3,7 +3,7 @@
 
 plugins {
     id("com.android.application") version "8.5.0" apply false
-    id("org.jetbrains.kotlin.android") version "2.3.0" apply false
+    id("org.jetbrains.kotlin.android") version "2.4.0" apply false
 }
 
 // 从 local.properties 读取 API Key（不提交到 git）
