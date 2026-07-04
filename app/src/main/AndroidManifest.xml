@@ -9,11 +9,9 @@
     <!-- Network permission (required by CXR-L SDK) -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <!-- Storage permission for model files and CustomApp APK -->
+    <!-- Storage permission for model files (legacy, scoped storage on API 33+) -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
-    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
-        tools:ignore="ScopedStorage" />
     <!-- Keep screen on -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <!-- Bluetooth permissions for BLE ring -->

@@ -38,6 +38,16 @@
 -keep class androidx.camera.** { *; }
 -dontwarn androidx.camera.*
 
+# ============ ONNX Runtime 保护 ============
+
+-keep class ai.onnxruntime.** { *; }
+-dontwarn ai.onnxruntime.**
+
+# ============ SpeechBrain / PyTorch 模型保护 ============
+
+-keep class org.pytorch.** { *; }
+-dontwarn org.pytorch.**
+
 # ============ CXR-M SDK 保护 (如果集成) ============
 
 # 取消注释当集成真实 CXR-M SDK 时

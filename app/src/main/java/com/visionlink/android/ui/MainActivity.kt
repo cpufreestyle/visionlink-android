@@ -27,7 +27,15 @@ import com.visionlink.android.bluetooth.BleRingManager
 import com.visionlink.android.utils.AICoreChecker
 import com.visionlink.android.voiceprint.VoicePrintManager
 import com.visionlink.android.voiceprint.VoicePrintDialog
-import kotlinx.coroutines.*
+import kotlinx.coroutines.CoroutineScope
+import import kotlinx.coroutines.Dispatchers
+import import kotlinx.coroutines.Job
+import import kotlinx.coroutines.SupervisorJob
+import import kotlinx.coroutines.launch
+import import kotlinx.coroutines.withContext
+import import kotlinx.coroutines.delay
+import import kotlinx.coroutines.cancel
+import import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.collectLatest
 
 class MainActivity : AppCompatActivity() {
@@ -272,6 +280,7 @@ class MainActivity : AppCompatActivity() {
                     speakSafely(result)
                 } catch (e: Exception) {
                     Log.e(TAG, "Continuous detection error: ${e.message}", e)
+                    ttsManager.speak("检测出错，正在重试")
                 }
                 delay(3000) // 每轮间隔，兼顾播报时长与 API 频率
             }
@@ -388,6 +397,7 @@ class MainActivity : AppCompatActivity() {
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Init exception: ${e.message}", e)
+                ttsManager.speak("初始化失败")
                 binding.btnInitAI.isEnabled = true
                 binding.btnInitAI.text = "Retry Init"
                 binding.tvAiStatus.text = getString(com.visionlink.android.R.string.error_prefix) + e.message
@@ -518,6 +528,9 @@ class MainActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 Log.e(TAG, "Download failed: ${e.message}", e)
                 if (!isDestroyed) {
+                    ttsManager.speak("下载失败")
+                    binding.btnDownloadModel.isEnabled = true
+                if (!isDestroyed) {
                     binding.btnDownloadModel.isEnabled = true
                     binding.btnDownloadModel.text = if (isEnglish) "Download Failed" else "\u4e0b\u8f7d\u5931\u6548"
                     speakSafely(if (isEnglish) "Model download failed" else "\u6a21\u578b\u4e0b\u8f7d\u5931\u6548")
@@ -581,6 +594,7 @@ class MainActivity : AppCompatActivity() {
                 speakSafely(result)
             } catch (e: Exception) {
                 Log.e("VisionLink", "Capture/analysis error: ${e.message}", e)
+            ttsManager.speak("分析失败")
                 binding.tvAiStatus.text = "Error: ${e.message}"
             }
         }

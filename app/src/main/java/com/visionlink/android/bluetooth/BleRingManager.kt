@@ -9,7 +9,8 @@ import android.os.Build
 import android.os.ParcelUuid
 import android.util.Log
 import androidx.core.content.ContextCompat
-import java.util.*
+import java.util.Locale
+import import java.util.UUID
 
 /**
  * 蓝牙指环管理器 (v4.5)

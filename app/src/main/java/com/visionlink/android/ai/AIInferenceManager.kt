@@ -5,10 +5,22 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.util.Base64
 import android.util.Log
-import kotlinx.coroutines.*
+import kotlinx.coroutines.CoroutineScope
+import import kotlinx.coroutines.Dispatchers
+import import kotlinx.coroutines.Job
+import import kotlinx.coroutines.SupervisorJob
+import import kotlinx.coroutines.launch
+import import kotlinx.coroutines.withContext
+import import kotlinx.coroutines.delay
+import import kotlinx.coroutines.cancel
+import import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import okhttp3.*
+import okhttp3.OkHttpClient
+import import okhttp3.Request
+import import okhttp3.Response
+import import okhttp3.MediaType.Companion.toMediaType
+import import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
@@ -73,6 +85,10 @@ class AIInferenceManager(private val context: Context) {
     private var currentMode: InferenceMode = InferenceMode.SINGLE_SHOT
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val httpClient = OkHttpClient()
+    private val pingHttpClient = OkHttpClient.Builder()
+        .connectTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
+        .build()
 
     // ========== API Test Method ==========
 
@@ -257,10 +273,7 @@ class AIInferenceManager(private val context: Context) {
      */
     private suspend fun pingMoonshotAPI(): Boolean = withContext(Dispatchers.IO) {
         try {
-            val client = OkHttpClient.Builder()
-                .connectTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
-                .readTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
-                .build()
+            val client = pingHttpClient
 
             val requestBody = JSONObject().apply {
                 put("model", MOONSHOT_MODEL)

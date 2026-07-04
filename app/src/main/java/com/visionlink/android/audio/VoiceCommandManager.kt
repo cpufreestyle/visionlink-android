@@ -140,23 +140,22 @@ class VoiceCommandManager(
             "close" to VoiceCommand.CLOSE
         )
 
-        // ========== NLU 意图关键词 (用于模糊匹配) ==========
+        // ========== NLU 意图关键词 (用于模糊匹配，已去除与 COMMANDS 精确重复的词) ==========
         private val INTENT_KEYWORDS = mapOf(
-            VoiceCommand.CAPTURE_ANALYZE to listOf("拍", "看", "分析", "前面", "周围", "什么"),
-            VoiceCommand.MODE_OBSTACLE to listOf("障碍", "避障", "挡", "安全"),
-            VoiceCommand.MODE_READ_TEXT to listOf("读", "念", "文字", "书", "信", "牌"),
-            VoiceCommand.MODE_SCENE to listOf("场景", "描述", "环境", "什么样"),
-            VoiceCommand.MODE_GUIDE to listOf("引导", "指向", "带路", "走"),
-            VoiceCommand.VOLUME_UP to listOf("大声", "音量大", "听不清"),
-            VoiceCommand.VOLUME_DOWN to listOf("小声", "音量小", "太吵"),
-            VoiceCommand.SPEED_DOWN to listOf("慢", "太快"),
-            VoiceCommand.SPEED_UP to listOf("快", "太慢"),
-            VoiceCommand.REPEAT to listOf("重复", "再说", "没听清"),
-            VoiceCommand.PAUSE to listOf("暂停", "停一下", "安静"),
-            VoiceCommand.RESUME to listOf("恢复", "继续", "开始"),
-            VoiceCommand.HELP to listOf("帮助", "怎么用", "命令"),
-            VoiceCommand.SWITCH_USER to listOf("切换", "换人", "不是"),
-            VoiceCommand.ENROLL_VOICEPRINT to listOf("注册", "添加", "声纹")
+            VoiceCommand.CAPTURE_ANALYZE to listOf("前面", "周围", "什么"),
+            VoiceCommand.MODE_OBSTACLE to listOf("挡", "安全"),
+            VoiceCommand.MODE_READ_TEXT to listOf("书", "信", "牌"),
+            VoiceCommand.MODE_SCENE to listOf("环境", "什么样"),
+            VoiceCommand.MODE_GUIDE to listOf("带路", "走"),
+            VoiceCommand.VOLUME_UP to listOf("听不清"),
+            VoiceCommand.VOLUME_DOWN to listOf("太吵"),
+            VoiceCommand.SPEED_DOWN to listOf("太快"),
+            VoiceCommand.SPEED_UP to listOf("太慢"),
+            VoiceCommand.REPEAT to listOf("没听清"),
+            VoiceCommand.PAUSE to listOf("停一下", "安静"),
+            VoiceCommand.HELP to listOf("怎么用"),
+            VoiceCommand.SWITCH_USER to listOf("不是"),
+            VoiceCommand.ENROLL_VOICEPRINT to listOf("添加")
         )
 
         const val HELP_TEXT_ZH = """可用命令：
@@ -434,6 +433,7 @@ Other: repeat, pause, resume, switch user, enroll, help"""
      * 2. 自定义命令匹配
      * 3. 包含匹配
      * 4. NLU 意图匹配（模糊）
+     * 5. 中英混合匹配（v5.1）
      */
     private fun matchCommandEnhanced(matches: List<String>): VoiceCommand {
         for (text in matches) {
@@ -446,7 +446,7 @@ Other: repeat, pause, resume, switch user, enroll, help"""
             customCommands[lower]?.let { return it }
         }
 
-        // 3. 包含匹配 + 4. NLU 意图匹配
+        // 3. 包含匹配 + 4. NLU 意图匹配 + 5. 中英混合
         var bestMatch: VoiceCommand = VoiceCommand.UNKNOWN
         var bestScore = 0
 
@@ -473,6 +473,20 @@ Other: repeat, pause, resume, switch user, enroll, help"""
                             bestScore = score
                             bestMatch = command
                         }
+                    }
+                }
+            }
+
+            // 5. 中英混合匹配：分词后分别匹配中英文关键词
+            // e.g. "帮我拍照 analyze" → 拆分为中文部分和英文部分
+            val chineseParts = Regex("[\u4e00-\u9fff]+").findAll(lower).map { it.value }.toList()
+            val englishParts = Regex("[a-z ]+").findAll(lower).map { it.value.trim() }.filter { it.isNotEmpty() }.toList()
+
+            for (part in chineseParts + englishParts) {
+                for ((keyword, command) in COMMANDS) {
+                    if (part.contains(keyword) && keyword.length > bestScore) {
+                        bestScore = keyword.length
+                        bestMatch = command
                     }
                 }
             }

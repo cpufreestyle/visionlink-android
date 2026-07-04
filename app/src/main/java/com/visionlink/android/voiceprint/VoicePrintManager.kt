@@ -5,7 +5,15 @@ import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.util.Log
-import kotlinx.coroutines.*
+import kotlinx.coroutines.CoroutineScope
+import import kotlinx.coroutines.Dispatchers
+import import kotlinx.coroutines.Job
+import import kotlinx.coroutines.SupervisorJob
+import import kotlinx.coroutines.launch
+import import kotlinx.coroutines.withContext
+import import kotlinx.coroutines.delay
+import import kotlinx.coroutines.cancel
+import import kotlinx.coroutines.isActive
 import org.json.JSONObject
 import java.io.File
 import java.nio.FloatBuffer
@@ -64,9 +72,103 @@ class VoicePrintManager(private val context: Context) {
         private const val F_MIN = 0.0f
         private const val F_MAX = 8000.0f
 
-        // 阈值
-        private const val VERIFY_THRESHOLD = 0.50f
-        private const val IDENTIFY_THRESHOLD = 0.45f
+        // 阈值 (可通过 SharedPreferences 覆盖)
+        private const val DEFAULT_VERIFY_THRESHOLD = 0.50f
+        private const val DEFAULT_IDENTIFY_THRESHOLD = 0.45f
+
+        // ========== FFT 预计算缓存 ==========
+        // N_FFT=400 不是 2 的幂，用 512 作为 FFT 大小
+        private const val FFT_SIZE = 512
+        private val FFT_SIZE_LOG2 = (Math.log(FFT_SIZE.toDouble()) / Math.log(2.0)).toInt()
+
+        // 预计算 bit-reversal 表
+        private val BIT_REVERSE_TABLE: IntArray by lazy {
+            val table = IntArray(FFT_SIZE)
+            for (i in 0 until FFT_SIZE) {
+                var j = 0
+                var bit = FFT_SIZE / 2
+                var idx = i
+                while (bit > 0) {
+                    if (idx and 1 != 0) j += bit
+                    idx = idx shr 1
+                    bit = bit shr 1
+                }
+                table[i] = j
+            }
+            table
+        }
+
+        // 预计算 twiddle factors (cos/sin 表)
+        private val TWIDDLE_REAL: FloatArray by lazy {
+            val table = FloatArray(FFT_SIZE / 2)
+            for (i in 0 until FFT_SIZE / 2) {
+                val angle = -2.0 * Math.PI * i / FFT_SIZE
+                table[i] = Math.cos(angle).toFloat()
+            }
+            table
+        }
+        private val TWIDDLE_IMAG: FloatArray by lazy {
+            val table = FloatArray(FFT_SIZE / 2)
+            for (i in 0 until FFT_SIZE / 2) {
+                val angle = -2.0 * Math.PI * i / FFT_SIZE
+                table[i] = Math.sin(angle).toFloat()
+            }
+            table
+        }
+
+        // 预计算 Hamming 窗
+        private val HAMMING_WINDOW: FloatArray by lazy {
+            val w = FloatArray(WIN_LENGTH)
+            for (j in 0 until WIN_LENGTH) {
+                w[j] = (0.54f - 0.46f * Math.cos(2 * Math.PI * j / (WIN_LENGTH - 1)).toFloat())
+            }
+            w
+        }
+
+        // 预计算 Mel 滤波器组
+        private val MEL_FILTERS: Array<FloatArray> by lazy {
+            createMelFilterBankStatic(FFT_SIZE, N_MELS, SAMPLE_RATE, F_MIN, F_MAX)
+        }
+
+        // Mel 转换辅助函数
+        private fun hzToMel(hz: Float): Float = 2595f * Math.log10(1 + hz / 700f).toFloat()
+        private fun melToHz(mel: Float): Float = 700f * (Math.pow(10f, mel / 2595f).toDouble().toFloat() - 1)
+
+        /**
+         * 静态创建 Mel 滤波器组 (供预计算使用)
+         */
+        private fun createMelFilterBankStatic(
+            nFft: Int, nMels: Int, sampleRate: Int, fMin: Float, fMax: Float
+        ): Array<FloatArray> {
+            val melMin = hzToMel(fMin)
+            val melMax = hzToMel(fMax)
+            val melPoints = FloatArray(nMels + 2)
+            for (i in 0..nMels + 1) {
+                melPoints[i] = melMin + (melMax - melMin) * i / (nMels + 1)
+            }
+
+            val hzPoints = FloatArray(nMels + 2) { melToHz(melPoints[it]) }
+            val binPoints = IntArray(nMels + 2) { Math.round(hzPoints[it] * nFft / sampleRate).toInt() }
+
+            val filters = Array(nMels) { FloatArray(nFft / 2 + 1) }
+            for (m in 0 until nMels) {
+                val left = binPoints[m]
+                val center = binPoints[m + 1]
+                val right = binPoints[m + 2]
+
+                for (k in left..center) {
+                    if (center > left) {
+                        filters[m][k] = (k - left).toFloat() / (center - left)
+                    }
+                }
+                for (k in center..right) {
+                    if (right > center) {
+                        filters[m][k] = (right - k).toFloat() / (right - center)
+                    }
+                }
+            }
+            return filters
+        }
 
         // 文件
         private const val MODEL_DIR = "models/voiceprint"
@@ -85,7 +187,19 @@ class VoicePrintManager(private val context: Context) {
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     // 已注册用户 {userId: VoicePrintUser}
-    private val enrolledUsers = mutableMapOf<String, VoicePrintUser>()
+    private val enrolledUsers = java.util.concurrent.ConcurrentHashMap<String, VoicePrintUser>()
+
+    // 可配置阈值
+    private var verifyThreshold: Float = DEFAULT_VERIFY_THRESHOLD
+    private var identifyThreshold: Float = DEFAULT_IDENTIFY_THRESHOLD
+
+    fun setVerifyThreshold(threshold: Float) {
+        verifyThreshold = threshold.coerceIn(0f, 1f)
+    }
+
+    fun setIdentifyThreshold(threshold: Float) {
+        identifyThreshold = threshold.coerceIn(0f, 1f)
+    }
 
     // ========== 数据类 ==========
 
@@ -207,6 +321,7 @@ class VoicePrintManager(private val context: Context) {
             return
         }
 
+        recordJob?.cancel()
         recordJob = scope.launch {
             isRecording.set(true)
             try {
@@ -276,6 +391,7 @@ class VoicePrintManager(private val context: Context) {
             return
         }
 
+        recordJob?.cancel()
         recordJob = scope.launch {
             isRecording.set(true)
             try {
@@ -296,7 +412,7 @@ class VoicePrintManager(private val context: Context) {
                 }
 
                 val score = cosineSimilarity(embedding, user.embedding)
-                val isMatch = score >= VERIFY_THRESHOLD
+                val isMatch = score >= verifyThreshold
 
                 Log.i(TAG, "Verify '$userId': score=$score, match=$isMatch")
                 withContext(Dispatchers.Main) {
@@ -337,6 +453,7 @@ class VoicePrintManager(private val context: Context) {
             return
         }
 
+        recordJob?.cancel()
         recordJob = scope.launch {
             isRecording.set(true)
             try {
@@ -368,7 +485,7 @@ class VoicePrintManager(private val context: Context) {
                     }
                 }
 
-                val isMatch = bestScore >= IDENTIFY_THRESHOLD
+                val isMatch = bestScore >= identifyThreshold
                 Log.i(TAG, "Identify: best='$bestUser' score=$bestScore match=$isMatch")
 
                 withContext(Dispatchers.Main) {
@@ -403,6 +520,7 @@ class VoicePrintManager(private val context: Context) {
             return
         }
 
+        recordJob?.cancel()
         recordJob = scope.launch {
             isRecording.set(true)
             try {
@@ -433,7 +551,7 @@ class VoicePrintManager(private val context: Context) {
                     }
                 }
 
-                val isMatch = bestScore >= IDENTIFY_THRESHOLD
+                val isMatch = bestScore >= identifyThreshold
                 withContext(Dispatchers.Main) {
                     callback(IdentificationResult(
                         userId = if (isMatch) bestUser?.userId else null,
@@ -621,20 +739,20 @@ class VoicePrintManager(private val context: Context) {
             }
         }
 
-        // 3. Hamming 窗
+        // 3. Hamming 窗 (使用预计算)
         for (i in 0 until numFrames) {
             for (j in 0 until WIN_LENGTH) {
-                frames[i][j] *= (0.54f - 0.46f * Math.cos(2 * Math.PI * j / (WIN_LENGTH - 1)).toFloat())
+                frames[i][j] *= HAMMING_WINDOW[j]
             }
         }
 
-        // 4. FFT → 功率谱
-        val nFft = N_FFT
+        // 4. FFT → 功率谱 (使用 FFT_SIZE=512)
+        val nFft = FFT_SIZE
         val powerSpec = Array(numFrames) { FloatArray(nFft / 2 + 1) }
         for (i in 0 until numFrames) {
             val fftInput = FloatArray(nFft)
             System.arraycopy(frames[i], 0, fftInput, 0, minOf(WIN_LENGTH, nFft))
-            val fftResult = fft(fftInput)
+            val fftResult = fftCached(fftInput)
             for (k in 0..nFft / 2) {
                 val re = fftResult[2 * k]
                 val im = fftResult[2 * k + 1]
@@ -642,8 +760,8 @@ class VoicePrintManager(private val context: Context) {
             }
         }
 
-        // 5. Mel 滤波器组
-        val melFilters = createMelFilterBank(nFft, N_MELS, SAMPLE_RATE, F_MIN, F_MAX)
+        // 5. Mel 滤波器组 (使用预计算)
+        val melFilters = MEL_FILTERS
         val fbank = Array(numFrames) { FloatArray(N_MELS) }
         for (i in 0 until numFrames) {
             for (m in 0 until N_MELS) {
@@ -678,7 +796,60 @@ class VoicePrintManager(private val context: Context) {
     }
 
     /**
-     * 简单 FFT (radix-2)
+     * 使用预计算表的 FFT (radix-2)
+     */
+    private fun fftCached(input: FloatArray): FloatArray {
+        val n = FFT_SIZE
+        require(input.size >= n) { "Input too small for FFT_SIZE" }
+        val real = FloatArray(n)
+        val imag = FloatArray(n)
+        System.arraycopy(input, 0, real, 0, minOf(input.size, n))
+
+        // Bit reversal (使用预计算表)
+        for (i in 0 until n) {
+            val j = BIT_REVERSE_TABLE[i]
+            if (i < j) {
+                var t = real[i]; real[i] = real[j]; real[j] = t
+                t = imag[i]; imag[i] = imag[j]; imag[j] = t
+            }
+        }
+
+        // Cooley-Tukey (使用预计算 twiddle factors)
+        var len = 2
+        var stage = 1
+        while (len <= n) {
+            val halfLen = len / 2
+            val stride = n / len
+            var i = 0
+            while (i < n) {
+                for (k in 0 until halfLen) {
+                    val twIdx = k * stride
+                    val wr = TWIDDLE_REAL[twIdx]
+                    val wi = TWIDDLE_IMAG[twIdx]
+                    val tr = wr * real[i + k + halfLen] - wi * imag[i + k + halfLen]
+                    val ti = wr * imag[i + k + halfLen] + wi * real[i + k + halfLen]
+                    real[i + k + halfLen] = real[i + k] - tr
+                    imag[i + k + halfLen] = imag[i + k] - ti
+                    real[i + k] += tr
+                    imag[i + k] += ti
+                }
+                i += len
+            }
+            len *= 2
+            stage++
+        }
+
+        // Interleave output
+        val result = FloatArray(2 * n)
+        for (i in 0 until n) {
+            result[2 * i] = real[i]
+            result[2 * i + 1] = imag[i]
+        }
+        return result
+    }
+
+    /**
+     * 旧版 FFT (保留兼容，未使用预计算表)
      */
     private fun fft(input: FloatArray): FloatArray {
         val n = input.size
@@ -736,43 +907,11 @@ class VoicePrintManager(private val context: Context) {
     }
 
     /**
-     * 创建 Mel 滤波器组
+     * 创建 Mel 滤波器组 (实例方法，委托给静态版本)
      */
     private fun createMelFilterBank(
         nFft: Int, nMels: Int, sampleRate: Int, fMin: Float, fMax: Float
-    ): Array<FloatArray> {
-        val melMin = hzToMel(fMin)
-        val melMax = hzToMel(fMax)
-        val melPoints = FloatArray(nMels + 2)
-        for (i in 0..nMels + 1) {
-            melPoints[i] = melMin + (melMax - melMin) * i / (nMels + 1)
-        }
-
-        val hzPoints = FloatArray(nMels + 2) { melToHz(melPoints[it]) }
-        val binPoints = IntArray(nMels + 2) { Math.round(hzPoints[it] * nFft / sampleRate).toInt() }
-
-        val filters = Array(nMels) { FloatArray(nFft / 2 + 1) }
-        for (m in 0 until nMels) {
-            val left = binPoints[m]
-            val center = binPoints[m + 1]
-            val right = binPoints[m + 2]
-
-            for (k in left..center) {
-                if (center > left) {
-                    filters[m][k] = (k - left).toFloat() / (center - left)
-                }
-            }
-            for (k in center..right) {
-                if (right > center) {
-                    filters[m][k] = (right - k).toFloat() / (right - center)
-                }
-            }
-        }
-        return filters
-    }
-
-    private fun hzToMel(hz: Float): Float = 2595f * Math.log10(1 + hz / 700f).toFloat()
-    private fun melToHz(mel: Float): Float = 700f * (Math.pow(10f, mel / 2595f).toDouble().toFloat() - 1)
+    ): Array<FloatArray> = createMelFilterBankStatic(nFft, nMels, sampleRate, fMin, fMax)
 
     // ========== ONNX 推理 ==========
 

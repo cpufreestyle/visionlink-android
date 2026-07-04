@@ -10,22 +10,18 @@ import kotlinx.coroutines.withContext
 import java.util.concurrent.Executors
 
 /**
- * AICore Manager - v1.0 (Real API Implementation)
+ * AICore Manager - v0.1 (Stub)
  *
- * Manages Google AI Core (Gemini Nano) on-device inference.
- * 
- * Requirements:
- *   - Android 14+ (API 34+)
- *   - Google Play Services 23.30.15+
- *   - Samsung Galaxy S24/S25 or Pixel 8+ (AICore supported devices)
+ * ⚠️ NOT IMPLEMENTED — Google AI Core (Gemini Nano) API 尚未接入。
+ * 所有方法返回模拟数据。待 Google 开放 AICore SDK 后替换为真实实现。
  *
- * Note: This is a REAL implementation using Google AI Core API.
- * The actual API may require beta access or special permissions.
- *
- * Dependency (add to build.gradle.kts):
+ * 预期依赖 (build.gradle.kts):
  *   implementation "com.google.ai.edge.aicore:aicore:0.1.0"
  *   implementation "com.google.android.gms:play-services-base:18.4.0"
+ *
+ * @deprecated 使用 AIInferenceManager 替代，此类将在真实 API 可用时重写
  */
+@Deprecated("Not implemented. Use AIInferenceManager instead.", ReplaceWith("AIInferenceManager"))
 class AICoreManager(private val context: Context) {
 
     companion object {
