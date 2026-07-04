@@ -29,6 +29,11 @@ class TTSManager(
     private var isInitialized = false
     private var pendingText: String? = null
     private val pendingLock = Any()
+
+    // 语音参数 (v2.0)
+    private var speechRate = 1.0f    // 语速 0.5-2.0
+    private var pitch = 1.0f         // 音调 0.5-2.0
+    private var volume = 1.0f        // 音量 0.0-1.0
     
     // 发音完成回调
     private var utteranceCallback: ((String, Boolean) -> Unit)? = null
@@ -73,15 +78,63 @@ class TTSManager(
     }
     
     /**
-     * 设置语音参数
+     * 设置语音参数 (v2.0)
      */
     private fun setVoiceParams() {
-        // 设置语速 (1.0 = 正常)
-        tts?.setSpeechRate(1.0f)
-        
-        // 设置音调 (1.0 = 正常)
-        tts?.setPitch(1.0f)
+        tts?.setSpeechRate(speechRate)
+        tts?.setPitch(pitch)
     }
+
+    /**
+     * 设置语速 (v2.0)
+     * @param rate 0.5 (最慢) - 2.0 (最快)
+     */
+    fun setSpeechRate(rate: Float) {
+        speechRate = rate.coerceIn(0.5f, 2.0f)
+        if (isInitialized) tts?.setSpeechRate(speechRate)
+        Log.d(TAG, "Speech rate set to $speechRate")
+    }
+
+    /**
+     * 设置音调 (v2.0)
+     * @param pitch 0.5 (低) - 2.0 (高)
+     */
+    fun setPitch(pitch: Float) {
+        this.pitch = pitch.coerceIn(0.5f, 2.0f)
+        if (isInitialized) tts?.setPitch(this.pitch)
+        Log.d(TAG, "Pitch set to ${this.pitch}")
+    }
+
+    /**
+     * 获取当前语速
+     */
+    fun getSpeechRate(): Float = speechRate
+
+    /**
+     * 获取当前音调
+     */
+    fun getPitch(): Float = pitch
+
+    /**
+     * 音量增加 (v2.0)
+     */
+    fun volumeUp() {
+        volume = (volume + 0.2f).coerceIn(0.0f, 1.0f)
+        Log.d(TAG, "Volume up to $volume")
+    }
+
+    /**
+     * 音量降低 (v2.0)
+     */
+    fun volumeDown() {
+        volume = (volume - 0.2f).coerceIn(0.0f, 1.0f)
+        Log.d(TAG, "Volume down to $volume")
+    }
+
+    /**
+     * 获取当前音量
+     */
+    fun getVolume(): Float = volume
     
     /**
      * 设置发音监听
