@@ -103,7 +103,7 @@ dependencies {
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.18.0")
 
     // RecyclerView (声纹用户列表)
-    implementation("androidx.recyclerview:recyclerview:1.3.2")
+    implementation("androidx.recyclerview:recyclerview:1.4.0")
 
     // Multidex
     implementation("androidx.multidex:multidex:2.0.1")
