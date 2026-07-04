@@ -93,6 +93,12 @@ dependencies {
     implementation("com.google.ai.edge.litert:litert-gpu:1.2.0")
     implementation("com.google.android.gms:play-services-tasks:18.1.0")
 
+    // ONNX Runtime (端侧声纹识别推理)
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.18.0")
+
+    // RecyclerView (声纹用户列表)
+    implementation("androidx.recyclerview:recyclerview:1.3.2")
+
     // Multidex
     implementation("androidx.multidex:multidex:2.0.1")
 
