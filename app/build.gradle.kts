@@ -88,7 +88,7 @@ dependencies {
     implementation("com.rokid.cxr:client-l:1.0.3")
 
     // HTTP client for API calls (also used for LM Studio connection)
-    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.squareup.okhttp3:okhttp:5.4.0")
 
     // MediaPipe Tasks Vision: 端侧实时手部关键点 + 物体检测（指向引导模式）
     implementation("com.google.mediapipe:tasks-vision:0.10.14")
