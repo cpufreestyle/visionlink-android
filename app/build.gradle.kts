@@ -97,7 +97,7 @@ dependencies {
     implementation("com.google.ai.edge.litertlm:litertlm-android:0.13.1")
     // GPU backend support
     implementation("com.google.ai.edge.litert:litert-gpu:1.2.0")
-    implementation("com.google.android.gms:play-services-tasks:18.1.0")
+    implementation("com.google.android.gms:play-services-tasks:18.4.1")
 
     // ONNX Runtime (端侧声纹识别推理)
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.18.0")
