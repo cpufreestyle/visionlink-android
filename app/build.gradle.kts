@@ -85,7 +85,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
 
     // Rokid CXR-L SDK
-    implementation("com.rokid.cxr:client-l:1.0.3")
+    implementation("com.rokid.cxr:client-l:1.1.0")
 
     // HTTP client for API calls (also used for LM Studio connection)
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
