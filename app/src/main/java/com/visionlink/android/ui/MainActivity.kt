@@ -25,6 +25,8 @@ import com.visionlink.android.audio.TTSManager
 import com.visionlink.android.audio.VoiceCommandManager
 import com.visionlink.android.bluetooth.BleRingManager
 import com.visionlink.android.utils.AICoreChecker
+import com.visionlink.android.voiceprint.VoicePrintManager
+import com.visionlink.android.voiceprint.VoicePrintDialog
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.collectLatest
 
@@ -43,6 +45,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var ringManager: BleRingManager
     private lateinit var glassesManager: CXRGlassesManager
     private var isVoiceEnabled = false
+    private lateinit var voicePrintManager: VoicePrintManager
+    private var currentUserId: String? = null  // 当前识别到的用户
 
     private var currentMode = 1
     private var isEnglish = false
@@ -91,7 +95,9 @@ class MainActivity : AppCompatActivity() {
         voiceManager.setEnglish(isEnglish)
         ttsManager.switchLanguage(isEnglish)
         ringManager = BleRingManager(this) { event -> handleRingEvent(event) }
-        Log.d(TAG, "All managers initialized")
+        voicePrintManager = VoicePrintManager(this)
+        voicePrintManager.initialize()
+        Log.d(TAG, "All managers initialized (voicePrint: ${voicePrintManager.isReady()})")
     }
 
     private fun setupUI() {
@@ -113,6 +119,7 @@ class MainActivity : AppCompatActivity() {
         binding.btnTestApi.setOnClickListener { testApi() }
         binding.btnTestLm.setOnClickListener { testLmStudio() }
         binding.btnTestEdge.setOnClickListener { testEdge() }
+        binding.btnVoicePrint.setOnClickListener { openVoicePrintDialog() }
         binding.btnExit.setOnClickListener { finish() }
 
         updateModeUI()
@@ -554,6 +561,65 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // ========== 声纹识别 ==========
+
+    private fun openVoicePrintDialog() {
+        val dialog = VoicePrintDialog(this, voicePrintManager)
+        dialog.onUserSelectedListener = object : VoicePrintDialog.OnUserSelectedListener {
+            override fun onUserSelected(user: VoicePrintManager.VoicePrintUser) {
+                currentUserId = user.userId
+                applyUserPreferences(user)
+            }
+        }
+        dialog.show()
+    }
+
+    /**
+     * 应用用户个性化设置
+     */
+    private fun applyUserPreferences(user: VoicePrintManager.VoicePrintUser) {
+        // 切换模式
+        if (user.preferredMode != currentMode) {
+            setMode(user.preferredMode)
+        }
+
+        // 切换语言
+        if (user.isEnglish != isEnglish) {
+            isEnglish = user.isEnglish
+            voiceManager.setEnglish(isEnglish)
+            ttsManager.switchLanguage(isEnglish)
+            val prefs = getSharedPreferences("visionlink", Context.MODE_PRIVATE)
+            prefs.edit().putBoolean("isEnglish", isEnglish).apply()
+        }
+
+        // TTS 语速/音调
+        // ttsManager 可能有 setRate/setPitch 方法，具体取决于 TTSManager 实现
+
+        speakSafely("欢迎回来，${user.name}")
+        Log.i(TAG, "Applied preferences for ${user.name}: mode=${user.preferredMode}, en=${user.isEnglish}")
+    }
+
+    /**
+     * 自动声纹识别（启动时调用）
+     */
+    private fun autoIdentifyUser() {
+        if (voicePrintManager.getEnrolledCount() == 0) return
+        if (!voicePrintManager.isReady()) return
+
+        speakSafely("正在识别身份...")
+        voicePrintManager.startIdentification { result ->
+            if (result.isMatch && result.userId != null) {
+                val user = voicePrintManager.getUser(result.userId!!)
+                user?.let {
+                    currentUserId = it.userId
+                    applyUserPreferences(it)
+                }
+            } else {
+                Log.d(TAG, "Auto-identify: no match (score=${result.score})")
+            }
+        }
+    }
+
     private fun openSettings() {
         val prefs = getSharedPreferences("visionlink", Context.MODE_PRIVATE)
         isEnglish = prefs.getBoolean("isEnglish", false)
@@ -659,7 +725,15 @@ class MainActivity : AppCompatActivity() {
             }
             VoiceCommandManager.VoiceCommand.INIT_AI -> { if (!aiManager.isInitialized()) initAI() }
             VoiceCommandManager.VoiceCommand.HELP -> speakSafely(voiceManager.getHelpText())
-            VoiceCommandManager.VoiceCommand.UNKNOWN -> speakSafely("未知命令，请说帮助")
+            VoiceCommandManager.VoiceCommand.UNKNOWN -> {
+                // 未知命令时尝试声纹识别
+                if (voicePrintManager.getEnrolledCount() > 0) {
+                    speakSafely("正在识别身份")
+                    autoIdentifyUser()
+                } else {
+                    speakSafely("未知命令，请说帮助")
+                }
+            }
         }
     }
 
@@ -818,6 +892,17 @@ class MainActivity : AppCompatActivity() {
             startCameraWithRetry()
         }
         checkGlassesConnection()
+        
+        // 自动声纹识别（如果已注册用户）
+        if (voicePrintManager.getEnrolledCount() > 0 && voicePrintManager.isReady()) {
+            // 延迟 2 秒，避免与相机初始化冲突
+            scope.launch {
+                delay(2000)
+                if (!isDestroyed && !isFinishing) {
+                    autoIdentifyUser()
+                }
+            }
+        }
     }
     
     /**
@@ -843,6 +928,7 @@ class MainActivity : AppCompatActivity() {
         try { ttsManager.release() }        catch (_: Exception) {}
         try { voiceManager.release() }      catch (_: Exception) {}
         try { ringManager.release() }        catch (_: Exception) {}
+        try { voicePrintManager.release() }   catch (_: Exception) {}
         try { glassesManager.release() }    catch (_: Exception) {}
         try { scope.cancel() }              catch (_: Exception) {}
         super.onDestroy()
