@@ -102,3 +102,4 @@ sdk/rokid-app.js
 sdk/rokid-sdk-page.html
 sdk/rokid-sdk-record.json
 sdk/rokid-cxrm/
+*.zip

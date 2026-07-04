@@ -1,0 +1,15 @@
+# VisionLink Android - 本地配置模板
+# 复制此文件为 local.properties 并填入实际值
+# local.properties 已在 .gitignore 中，不会被提交
+
+# Moonshot API Key (用于 AI 图像分析)
+moonshot.api.key=your_moonshot_api_key_here
+
+# Moonshot API Key (用于测试连接，可与上面相同)
+moonshot.api.key.test=your_moonshot_test_key_here
+
+# LM Studio URL (局域网内 PC 运行的 LM Studio)
+lmstudio.url=http://172.16.20.242:1234/v1/chat/completions
+
+# Android SDK 路径 (Android Studio 会自动生成)
+# sdk.dir=/path/to/Android/Sdk

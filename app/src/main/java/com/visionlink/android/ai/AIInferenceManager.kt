@@ -14,6 +14,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import com.google.ai.edge.litertlm.*
+import com.visionlink.android.BuildConfig
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
@@ -31,7 +32,7 @@ class AIInferenceManager(private val context: Context) {
         // Mimo API Configuration (correct endpoint)
         private const val MIMO_API_URL = "<SIGNED_URL_REMOVED>"
         private const val MOONSHOT_API_URL = "https://api.moonshot.cn/v1/chat/completions"
-        private const val MOONSHOT_API_KEY = "1a5Zv7fDZ4psyGGyTVnHLH7zD7eqap98yWmXfhGvBmDH67TVQQEnvGHsoHSZR2QY0"
+        private val MOONSHOT_API_KEY = BuildConfig.MOONSHOT_API_KEY
         private const val MOONSHOT_MODEL = "moonshot-v1-8k"
         // 图像分析必须用 vision 模型，普通 moonshot-v1-8k 看不到图像
         private const val MOONSHOT_VISION_MODEL = "moonshot-v1-8k-vision-preview"
@@ -98,7 +99,7 @@ class AIInferenceManager(private val context: Context) {
             
             val request = Request.Builder()
                 .url("https://api.moonshot.cn/v1/chat/completions")
-                .addHeader("Authorization", "Bearer sk-kEm7V22Hx5iIpTMqSwv7zJ24ajgU3A3GjfWC25LFhmBsEBws")
+                .addHeader("Authorization", "Bearer ${BuildConfig.MOONSHOT_API_KEY_TEST}")
                 .addHeader("Content-Type", "application/json")
                 .post(requestBody)
                 .build()
@@ -220,16 +221,71 @@ class AIInferenceManager(private val context: Context) {
 
     suspend fun initialize() = withContext(Dispatchers.IO) {
         Log.d(TAG, "Initializing AI Inference Manager with ${currentEngine.name}")
-        // Keep current engine (don't override setEngine)
+
+        // 对 Moonshot 引擎做一次 ping 检查，验证 API Key 有效
+        if (currentEngine == InferenceEngine.MOONSHOT) {
+            val pingOk = pingMoonshotAPI()
+            if (!pingOk) {
+                Log.e(TAG, "Moonshot API ping failed — API Key may be invalid")
+                updateState {
+                    copy(
+                        engine = currentEngine,
+                        isInitialized = false,
+                        modelDownloaded = false,
+                        downloadProgress = 0,
+                        initError = "API Key 无效或网络不可用"
+                    )
+                }
+                return@withContext
+            }
+        }
+
         updateState {
             copy(
                 engine = currentEngine,
                 isInitialized = true,
                 modelDownloaded = true,
-                downloadProgress = 100
+                downloadProgress = 100,
+                initError = null
             )
         }
-        Log.d(TAG, "AI initialized with MOONSHOT (Moonshot API)")
+        Log.d(TAG, "AI initialized with ${currentEngine.name}")
+    }
+
+    /**
+     * Ping Moonshot API 验证连通性
+     */
+    private suspend fun pingMoonshotAPI(): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val client = OkHttpClient.Builder()
+                .connectTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
+                .readTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
+                .build()
+
+            val requestBody = JSONObject().apply {
+                put("model", MOONSHOT_MODEL)
+                put("messages", org.json.JSONArray().apply {
+                    put(JSONObject().apply {
+                        put("role", "user")
+                        put("content", "ping")
+                    })
+                })
+                put("max_tokens", 1)
+            }.toString()
+
+            val request = Request.Builder()
+                .url(MOONSHOT_API_URL)
+                .addHeader("Authorization", "Bearer $MOONSHOT_API_KEY")
+                .addHeader("Content-Type", "application/json")
+                .post(requestBody.toRequestBody("application/json".toMediaType()))
+                .build()
+
+            val response = client.newCall(request).execute()
+            response.isSuccessful || response.code == 400  // 400 可能是 max_tokens 太小但 Key 有效
+        } catch (e: Exception) {
+            Log.e(TAG, "Moonshot ping error: ${e.message}")
+            false
+        }
     }
 
     suspend fun analyzeImage(bitmap: Bitmap, mode: Int): String =
@@ -382,7 +438,7 @@ class AIInferenceManager(private val context: Context) {
      * Connect to LM Studio running on PC (OpenAI-compatible API)
      * User's LM Studio: 172.16.20.242:1234
      */
-    private var lmStudioUrl: String = "http://172.16.20.242:1234/v1/chat/completions"
+    private var lmStudioUrl: String = BuildConfig.LM_STUDIO_URL
     
     fun setLmStudioUrl(url: String) {
         lmStudioUrl = url

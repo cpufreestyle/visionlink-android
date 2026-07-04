@@ -101,8 +101,15 @@ class MainActivity : AppCompatActivity() {
         // 声纹门控：受保护命令需先验证身份
         voiceManager.voicePrintGate = { command, execute ->
             if (voicePrintManager.getEnrolledCount() > 0 && voicePrintManager.isReady()) {
+                // 使用当前已识别用户，而非第一个注册用户
+                val targetUser = currentUserId ?: voicePrintManager.getEnrolledUsers().firstOrNull()?.userId
+                if (targetUser.isNullOrEmpty()) {
+                    // 无已注册用户，直接执行
+                    execute()
+                    return@voicePrintGate
+                }
                 speakSafely("请先验证身份")
-                voicePrintManager.startVerification(voicePrintManager.getEnrolledUsers().firstOrNull()?.userId ?: "") { result ->
+                voicePrintManager.startVerification(targetUser) { result ->
                     if (result.isMatch) {
                         execute()
                     } else {
@@ -779,11 +786,13 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             VoiceCommandManager.VoiceCommand.PAUSE -> {
+                voiceManager.stopListening()
                 ttsManager.stop()
                 speakSafely("已暂停")
             }
             VoiceCommandManager.VoiceCommand.RESUME -> {
                 speakSafely("已恢复")
+                voiceManager.startListening()
             }
             VoiceCommandManager.VoiceCommand.SWITCH_USER -> {
                 speakSafely("正在识别身份")

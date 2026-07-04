@@ -1,7 +1,7 @@
 ﻿# VisionLink Android - 全离线端侧 AI 助盲眼镜
 
 > 基于 Gemma 4 E2B 的全离线端侧 AI 助盲眼镜 Android 实现  
-> 对应 PC 版: [VisionLink-AI-Glasses](https://github.com/your-repo/VisionLink-AI-Glasses)
+> 对应 PC 版: [VisionLink-AI-Glasses](https://github.com/cpufreestyle/visionlink-android)
 
 [![Android](https://img.shields.io/badge/Android-13+-green.svg)](https://www.android.com/)
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.0.0-blue.svg)](https://kotlinlang.org/)
@@ -27,7 +27,7 @@
 
 ## 🎯 项目简介
 
-**VisionLink Android** 是将 PC 版 [VisionLink-AI-Glasses](https://github.com/your-repo/VisionLink-AI-Glasses) 移植到 Android 的全离线端侧 AI 助盲眼镜系统。
+**VisionLink Android** 是将 PC 版 [VisionLink-AI-Glasses](https://github.com/cpufreestyle/visionlink-android) 移植到 Android 的全离线端侧 AI 助盲眼镜系统。
 
 ### 核心亮点
 
@@ -124,7 +124,7 @@
 ### 1️⃣ 克隆项目
 
 ```bash
-git clone https://github.com/your-repo/visionlink-android.git
+git clone https://github.com/cpufreestyle/visionlink-android.git
 cd visionlink-android
 ```
 
@@ -611,13 +611,13 @@ private const val MAX_TOKENS = 128  // 从 256 减少到 128，加快推理速�
 - **Google LiteRT-LM 团队** - 提供端侧 LLM 推理框架
 - **Rokid** - 提供 CXR-L 智能眼镜 SDK
 - **TensorFlow Lite 团队** - 提供视觉模型推理框架
-- **PC 版作者** - [VisionLink-AI-Glasses](https://github.com/your-repo/VisionLink-AI-Glasses)
+- **PC 版作者** - [VisionLink-AI-Glasses](https://github.com/cpufreestyle/visionlink-android)
 
 ---
 
 ## 📧 联系方式
 
-- **Issue Tracker**: [GitHub Issues](https://github.com/your-repo/visionlink-android/issues)
+- **Issue Tracker**: [GitHub Issues](https://github.com/cpufreestyle/visionlink-android/issues)
 - **Email**: your-email@example.com
 
 ---
