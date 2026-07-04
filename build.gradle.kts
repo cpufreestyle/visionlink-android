@@ -2,7 +2,7 @@
 // 要求: Android 13+ (API 33+)
 
 plugins {
-    id("com.android.application") version "8.5.0" apply false
+    id("com.android.application") version "9.2.1" apply false
     id("org.jetbrains.kotlin.android") version "2.3.0" apply false
 }
 
