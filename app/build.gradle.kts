@@ -11,10 +11,15 @@ android {
         applicationId = "com.visionlink.android"
         minSdk = 31
         targetSdk = 35
-        versionCode = 10
-        versionName = "4.9.1"
+        versionCode = 50
+        versionName = "5.0.0"
 
         multiDexEnabled = true
+
+        // API Key 通过 BuildConfig 注入（不硬编码在源码中）
+        buildConfigField("String", "MOONSHOT_API_KEY", "\"${rootProject.ext["MOONSHOT_API_KEY"]}\"")
+        buildConfigField("String", "MOONSHOT_API_KEY_TEST", "\"${rootProject.ext["MOONSHOT_API_KEY_TEST"]}\"")
+        buildConfigField("String", "LM_STUDIO_URL", "\"${rootProject.ext["LM_STUDIO_URL"]}\"")
     }
 
     buildTypes {
@@ -42,6 +47,7 @@ android {
 
     buildFeatures {
         viewBinding = true
+        buildConfig = true
     }
 
     testOptions {
@@ -88,7 +94,7 @@ dependencies {
     implementation("com.google.mediapipe:tasks-vision:0.10.14")
 
     // Google AI Edge LiteRT-LM for on-device LLM inference
-    implementation("com.google.ai.edge.litertlm:litertlm-android:latest.release")
+    implementation("com.google.ai.edge.litertlm:litertlm-android:0.13.1")
     // GPU backend support
     implementation("com.google.ai.edge.litert:litert-gpu:1.2.0")
     implementation("com.google.android.gms:play-services-tasks:18.1.0")

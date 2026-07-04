@@ -76,7 +76,7 @@ class VoicePrintManager(private val context: Context) {
     }
 
     // ONNX Runtime
-    private var ortSession: Any? = null  // ort Session (反射调用，避免硬依赖)
+    private var ortSession: ai.onnxruntime.OrtSession? = null
     private var isModelLoaded = false
 
     // 录音状态
@@ -154,23 +154,13 @@ class VoicePrintManager(private val context: Context) {
             // 复制 ONNX 模型到 cache 目录
             val modelFile = copyAssetToCache(MODEL_FILE, "$MODEL_DIR/$MODEL_FILE")
 
-            // 用反射加载 ONNX Runtime（避免编译期硬依赖）
-            val ortClass = Class.forName("ai.onnxruntime.OnnxTensor")
-            val sessionClass = Class.forName("ai.onnxruntime.OrtSession")
-            val envClass = Class.forName("ai.onnxruntime.OrtEnvironment")
+            // 强类型 ONNX Runtime API
+            val env = ai.onnxruntime.OrtEnvironment.getDefault()
+            val opts = ai.onnxruntime.OrtSession.SessionOptions().apply {
+                setIntraOpNumThreads(2)
+            }
 
-            // 创建 OrtEnvironment
-            val env = envClass.getMethod("getDefault").invoke(null)
-
-            // 创建 SessionOptions
-            val optsClass = Class.forName("ai.onnxruntime.OrtSession\$SessionOptions")
-            val opts = optsClass.getDeclaredConstructor().newInstance()
-
-            // 创建 Session
-            val session = sessionClass.getConstructor(envClass, String::class.java, optsClass)
-                .newInstance(env, modelFile.absolutePath, opts)
-
-            ortSession = session
+            ortSession = ai.onnxruntime.OrtSession(env, modelFile.absolutePath, opts)
             isModelLoaded = true
 
             // 加载已注册用户
@@ -801,8 +791,8 @@ class VoicePrintManager(private val context: Context) {
             // 1. 提取 FBANK 特征
             val fbank = extractFbank(audio)  // (T, 80)
 
-            // 2. ONNX 推理
-            val session = ortSession!! as ai.onnxruntime.OrtSession
+            // 2. ONNX 推理 (强类型 API)
+            val session = ortSession!!
             val env = ai.onnxruntime.OrtEnvironment.getDefault()
 
             // 输入 shape: (1, T, 80)
@@ -938,7 +928,7 @@ class VoicePrintManager(private val context: Context) {
     fun release() {
         stopRecording()
         try {
-            (ortSession as? ai.onnxruntime.OrtSession)?.close()
+            (ortSession)?.close()
         } catch (_: Exception) {}
         ortSession = null
         isModelLoaded = false

@@ -135,6 +135,15 @@ class TTSManager(
      * 获取当前音量
      */
     fun getVolume(): Float = volume
+
+    /**
+     * 直接设置音量 (v5.1)
+     * @param vol 0.0 (静音) - 1.0 (最大)
+     */
+    fun setVolume(vol: Float) {
+        volume = vol.coerceIn(0.0f, 1.0f)
+        Log.d(TAG, "Volume set to $volume")
+    }
     
     /**
      * 设置发音监听
@@ -190,6 +199,7 @@ class TTSManager(
         val utteranceId = "VisionLink_${System.currentTimeMillis()}"
         val params = HashMap<String, String>()
         params[TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID] = utteranceId
+        params[TextToSpeech.Engine.KEY_PARAM_VOLUME] = volume.toString()
         
         tts?.speak(
             cleanText,
