@@ -91,7 +91,7 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
     // MediaPipe Tasks Vision: 端侧实时手部关键点 + 物体检测（指向引导模式）
-    implementation("com.google.mediapipe:tasks-vision:0.10.14")
+    implementation("com.google.mediapipe:tasks-vision:0.20230731")
 
     // Google AI Edge LiteRT-LM for on-device LLM inference
     implementation("com.google.ai.edge.litertlm:litertlm-android:0.13.1")
