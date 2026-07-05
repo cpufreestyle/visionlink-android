@@ -28,14 +28,14 @@ import com.visionlink.android.utils.AICoreChecker
 import com.visionlink.android.voiceprint.VoicePrintManager
 import com.visionlink.android.voiceprint.VoicePrintDialog
 import kotlinx.coroutines.CoroutineScope
-import import kotlinx.coroutines.Dispatchers
-import import kotlinx.coroutines.Job
-import import kotlinx.coroutines.SupervisorJob
-import import kotlinx.coroutines.launch
-import import kotlinx.coroutines.withContext
-import import kotlinx.coroutines.delay
-import import kotlinx.coroutines.cancel
-import import kotlinx.coroutines.isActive
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.collectLatest
 
 class MainActivity : AppCompatActivity() {
@@ -172,7 +172,7 @@ class MainActivity : AppCompatActivity() {
                     AIInferenceManager.InferenceEngine.EDGE     -> "Edge (Gemma 4)"
                     AIInferenceManager.InferenceEngine.LITERT_LM  -> "LiteRT-LM (Gemma 4 E2B)"
                     AIInferenceManager.InferenceEngine.CLOUD     -> "Cloud (API)"
-                    AIInferenceManager.InferenceEngine.MOONSHOT  -> "Moonshot API (Kimi)"
+                    AIInferenceManager.InferenceEngine.STEPFUN  -> "StepFun API (阶跃星辰)"
                     AIInferenceManager.InferenceEngine.LM_STUDIO -> "LM Studio (Local)"
                     AIInferenceManager.InferenceEngine.NONE      -> "Not selected"
                 }

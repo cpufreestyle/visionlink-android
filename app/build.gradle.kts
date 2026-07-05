@@ -17,8 +17,8 @@ android {
         multiDexEnabled = true
 
         // API Key 通过 BuildConfig 注入（不硬编码在源码中）
-        buildConfigField("String", "MOONSHOT_API_KEY", "\"${rootProject.ext["MOONSHOT_API_KEY"]}\"")
-        buildConfigField("String", "MOONSHOT_API_KEY_TEST", "\"${rootProject.ext["MOONSHOT_API_KEY_TEST"]}\"")
+        buildConfigField("String", "STEPFUN_API_KEY", "\"${rootProject.ext["STEPFUN_API_KEY"]}\"")
+        buildConfigField("String", "STEPFUN_API_KEY_TEST", "\"${rootProject.ext["STEPFUN_API_KEY_TEST"]}\"")
         buildConfigField("String", "LM_STUDIO_URL", "\"${rootProject.ext["LM_STUDIO_URL"]}\"")
     }
 

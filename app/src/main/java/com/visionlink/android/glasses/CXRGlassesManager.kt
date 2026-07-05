@@ -10,14 +10,14 @@ import android.util.Log
 import com.rokid.cxr.link.CXRLink
 import com.visionlink.android.VisionLinkApplication
 import kotlinx.coroutines.CoroutineScope
-import import kotlinx.coroutines.Dispatchers
-import import kotlinx.coroutines.Job
-import import kotlinx.coroutines.SupervisorJob
-import import kotlinx.coroutines.launch
-import import kotlinx.coroutines.withContext
-import import kotlinx.coroutines.delay
-import import kotlinx.coroutines.cancel
-import import kotlinx.coroutines.isActive
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.isActive
 
 /**
  * Rokid CXR-L SDK glasses manager.

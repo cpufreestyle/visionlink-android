@@ -5,22 +5,16 @@ import android.graphics.Bitmap
 import android.util.Log
 import com.visionlink.android.ai.AIInferenceManager
 import com.visionlink.android.audio.TTSManager
-import kotlinx.coroutines.CoroutineScope
-import import kotlinx.coroutines.Dispatchers
-import import kotlinx.coroutines.Job
-import import kotlinx.coroutines.SupervisorJob
-import import kotlinx.coroutines.launch
-import import kotlinx.coroutines.withContext
-import import kotlinx.coroutines.delay
-import import kotlinx.coroutines.cancel
-import import kotlinx.coroutines.isActive
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 
 /**
  * AI 控制器 — 管理 AI 引擎初始化、切换、分析调用
  *
  * 从 MainActivity 抽取的职责：
  * - AI 引擎初始化
- * - 引擎切换 (Moonshot / LM Studio / LiteRT-LM / AICore)
+ * - 引擎切换 (StepFun / LM Studio / LiteRT-LM / AICore)
  * - 单次/连续分析调度
  */
 class AIController(
@@ -31,13 +25,13 @@ class AIController(
 ) {
     companion object {
         private const val TAG = "AIController"
-        const val ENGINE_MOONSHOT = 0
+        const val ENGINE_STEPFUN = 0
         const val ENGINE_LM_STUDIO = 1
         const val ENGINE_LITERT = 2
         const val ENGINE_AICORE = 3
     }
 
-    private var currentEngine = ENGINE_MOONSHOT
+    private var currentEngine = ENGINE_STEPFUN
     private var isInitialized = false
 
     fun getCurrentEngine(): Int = currentEngine
@@ -46,7 +40,7 @@ class AIController(
     fun setEngine(engine: Int) {
         currentEngine = engine
         val name = when (engine) {
-            ENGINE_MOONSHOT -> "Moonshot"
+            ENGINE_STEPFUN -> "StepFun"
             ENGINE_LM_STUDIO -> "LM Studio"
             ENGINE_LITERT -> "LiteRT-LM"
             ENGINE_AICORE -> "AICore"

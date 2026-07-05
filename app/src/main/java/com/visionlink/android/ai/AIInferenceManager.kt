@@ -6,21 +6,19 @@ import android.graphics.BitmapFactory
 import android.util.Base64
 import android.util.Log
 import kotlinx.coroutines.CoroutineScope
-import import kotlinx.coroutines.Dispatchers
-import import kotlinx.coroutines.Job
-import import kotlinx.coroutines.SupervisorJob
-import import kotlinx.coroutines.launch
-import import kotlinx.coroutines.withContext
-import import kotlinx.coroutines.delay
-import import kotlinx.coroutines.cancel
-import import kotlinx.coroutines.isActive
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import okhttp3.OkHttpClient
-import import okhttp3.Request
-import import okhttp3.Response
-import import okhttp3.MediaType.Companion.toMediaType
-import import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.Request
+import okhttp3.Response
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
@@ -28,6 +26,8 @@ import org.json.JSONObject
 import com.google.ai.edge.litertlm.*
 import com.visionlink.android.BuildConfig
 import java.io.ByteArrayOutputStream
+import java.io.File
+import java.io.IOException
 import java.io.File
 import java.io.IOException
 
@@ -41,13 +41,12 @@ class AIInferenceManager(private val context: Context) {
     companion object {
         private const val TAG = "AIInferenceManager"
 
-        // Mimo API Configuration (correct endpoint)
-        private const val MIMO_API_URL = "<SIGNED_URL_REMOVED>"
-        private const val MOONSHOT_API_URL = "https://api.moonshot.cn/v1/chat/completions"
-        private val MOONSHOT_API_KEY = BuildConfig.MOONSHOT_API_KEY
-        private const val MOONSHOT_MODEL = "moonshot-v1-8k"
-        // 图像分析必须用 vision 模型，普通 moonshot-v1-8k 看不到图像
-        private const val MOONSHOT_VISION_MODEL = "moonshot-v1-8k-vision-preview"
+        // StepFun API Configuration (阶跃星辰)
+        private const val STEPFUN_API_URL = "https://api.stepfun.com/v1/chat/completions"
+        private val STEPFUN_API_KEY = BuildConfig.STEPFUN_API_KEY
+        private const val STEPFUN_TEXT_MODEL = "step-1-flash"
+        // 图像分析用 vision 模型
+        private const val STEPFUN_VISION_MODEL = "step-1v-8k"
         
         // Google AI Edge LiteRT-LM Configuration
         private const val GEMMA_MODEL_NAME = "gemma-3n-E2B-it-int4"
@@ -62,11 +61,11 @@ class AIInferenceManager(private val context: Context) {
         private const val MIN_SDK = 33
     }
 
-    enum class InferenceEngine { NONE, AICORE, EDGE, LITERT_LM, CLOUD, MOONSHOT, LM_STUDIO }
+    enum class InferenceEngine { NONE, AICORE, EDGE, LITERT_LM, CLOUD, STEPFUN, LM_STUDIO }
     enum class InferenceMode { SINGLE_SHOT, CONTINUOUS }
 
     data class ManagerState(
-        val engine: InferenceEngine = InferenceEngine.MOONSHOT,
+        val engine: InferenceEngine = InferenceEngine.STEPFUN,
         val mode: InferenceMode = InferenceMode.SINGLE_SHOT,
         val isInitialized: Boolean = false,
         val modelDownloaded: Boolean = true,
@@ -81,7 +80,7 @@ class AIInferenceManager(private val context: Context) {
     private val _state = MutableStateFlow(ManagerState())
     val state: StateFlow<ManagerState> = _state
 
-    private var currentEngine: InferenceEngine = InferenceEngine.MOONSHOT
+    private var currentEngine: InferenceEngine = InferenceEngine.STEPFUN
     private var currentMode: InferenceMode = InferenceMode.SINGLE_SHOT
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val httpClient = OkHttpClient()
@@ -99,7 +98,7 @@ class AIInferenceManager(private val context: Context) {
         try {
             // 发送一个简单的测试请求
             val jsonBody = JSONObject().apply {
-                put("model", "moonshot-v1-8k")
+                put("model", STEPFUN_TEXT_MODEL)
                 put("temperature", 0.1f)
                 put("max_tokens", 50)
                 put("messages", JSONArray().apply {
@@ -114,13 +113,13 @@ class AIInferenceManager(private val context: Context) {
                 .toRequestBody("application/json".toMediaType())
             
             val request = Request.Builder()
-                .url("https://api.moonshot.cn/v1/chat/completions")
-                .addHeader("Authorization", "Bearer ${BuildConfig.MOONSHOT_API_KEY_TEST}")
+                .url(STEPFUN_API_URL)
+                .addHeader("Authorization", "Bearer ${BuildConfig.STEPFUN_API_KEY_TEST}")
                 .addHeader("Content-Type", "application/json")
                 .post(requestBody)
                 .build()
             
-            Log.d(TAG, "Sending test request to api.moonshot.cn...")
+            Log.d(TAG, "Sending test request to api.stepfun.com...")
             
             val response = httpClient.newCall(request).execute()
             val responseBody = response.body?.string()
@@ -155,7 +154,7 @@ class AIInferenceManager(private val context: Context) {
             
         } catch (e: IOException) {
             Log.e(TAG, "Network error: ${e.message}", e)
-            return@withContext "Network Error: ${e.message}\n可能网络无法访问 api.moonshot.cn"
+            return@withContext "Network Error: ${e.message}\n可能网络无法访问 api.stepfun.com"
         } catch (e: Exception) {
             Log.e(TAG, "API test error: ${e.message}", e)
             return@withContext "Error: ${e.message}"
@@ -239,7 +238,7 @@ class AIInferenceManager(private val context: Context) {
         Log.d(TAG, "Initializing AI Inference Manager with ${currentEngine.name}")
 
         // 对 Moonshot 引擎做一次 ping 检查，验证 API Key 有效
-        if (currentEngine == InferenceEngine.MOONSHOT) {
+        if (currentEngine == InferenceEngine.STEPFUN) {
             val pingOk = pingMoonshotAPI()
             if (!pingOk) {
                 Log.e(TAG, "Moonshot API ping failed — API Key may be invalid")
@@ -276,7 +275,7 @@ class AIInferenceManager(private val context: Context) {
             val client = pingHttpClient
 
             val requestBody = JSONObject().apply {
-                put("model", MOONSHOT_MODEL)
+                put("model", STEPFUN_TEXT_MODEL)
                 put("messages", org.json.JSONArray().apply {
                     put(JSONObject().apply {
                         put("role", "user")
@@ -287,8 +286,8 @@ class AIInferenceManager(private val context: Context) {
             }.toString()
 
             val request = Request.Builder()
-                .url(MOONSHOT_API_URL)
-                .addHeader("Authorization", "Bearer $MOONSHOT_API_KEY")
+                .url(STEPFUN_API_URL)
+                .addHeader("Authorization", "Bearer $STEPFUN_API_KEY")
                 .addHeader("Content-Type", "application/json")
                 .post(requestBody.toRequestBody("application/json".toMediaType()))
                 .build()
@@ -311,7 +310,7 @@ class AIInferenceManager(private val context: Context) {
             Log.d(TAG, "Analyzing image with prompt: ${prompt.take(50)}...")
 
             val result = when (currentEngine) {
-                InferenceEngine.MOONSHOT -> callMoonshotAPI(prompt, bitmap)
+                InferenceEngine.STEPFUN -> callMoonshotAPI(prompt, bitmap)
                 InferenceEngine.LM_STUDIO -> runLmStudioInference(prompt, bitmap)
                 InferenceEngine.EDGE -> runEdgeInference(prompt, bitmap)
                 else -> "Unsupported engine: $currentEngine"
@@ -354,7 +353,7 @@ class AIInferenceManager(private val context: Context) {
 
                     // OpenAI 兼容格式 + vision 模型，图像随请求一起发送
                     val jsonBody = JSONObject().apply {
-                        put("model", MOONSHOT_VISION_MODEL)
+                        put("model", STEPFUN_VISION_MODEL)
                         put("temperature", TEMPERATURE)
                         put("max_tokens", MAX_TOKENS)
                         put("messages", JSONArray().apply {
@@ -380,8 +379,8 @@ class AIInferenceManager(private val context: Context) {
                         .toRequestBody("application/json".toMediaType())
                     
                     val request = Request.Builder()
-                        .url(MOONSHOT_API_URL)
-                        .addHeader("Authorization", "Bearer $MOONSHOT_API_KEY")
+                        .url(STEPFUN_API_URL)
+                        .addHeader("Authorization", "Bearer $STEPFUN_API_KEY")
                         .addHeader("Content-Type", "application/json")
                         .post(requestBody)
                         .build()

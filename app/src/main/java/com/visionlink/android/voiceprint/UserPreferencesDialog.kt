@@ -2,9 +2,9 @@ package com.visionlink.android.voiceprint
 
 import android.content.Context
 import android.widget.Button
-import import android.widget.TextView
-import import android.widget.Toast
-import import android.widget.ArrayAdapter
+import android.widget.TextView
+import android.widget.Toast
+import android.widget.ArrayAdapter
 import androidx.appcompat.app.AlertDialog
 import com.visionlink.android.R
 
