@@ -7,11 +7,13 @@
         </trust-anchors>
     </base-config>
 
-    <!-- 例外：LM Studio 局域网地址（HTTP） -->
+    <!-- 例外：局域网/本地地址允许 HTTP 明文（A2A Server + OpenClaw Gateway + LM Studio） -->
     <domain-config cleartextTrafficPermitted="true">
         <domain includeSubdomains="false">172.16.20.242</domain>
         <domain includeSubdomains="true">localhost</domain>
         <domain includeSubdomains="true">127.0.0.1</domain>
         <domain includeSubdomains="true">10.0.2.2</domain>
+        <domain includeSubdomains="true">192.168.0.0</domain>
+        <domain includeSubdomains="true">0.0.0.0</domain>
     </domain-config>
 </network-security-config>

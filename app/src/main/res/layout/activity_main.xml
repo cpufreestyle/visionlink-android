@@ -203,7 +203,7 @@
                 android:contentDescription="测试LM Studio连接" />
 
 
-            <Button android:id="+id/btnTestEdge" style="@style/Widget.Material3.Button"
+            <Button android:id="@+id/btnTestEdge" style="@style/Widget.Material3.Button"
                 android:layout_width="wrap_content" android:layout_height="wrap_content"
                 android:layout_margin="2dp" android:backgroundTint="#E65100"
                 android:text="Test EDGE" android:textColor="#FFFFFF" android:textSize="12sp"
@@ -214,6 +214,12 @@
                 android:layout_margin="2dp" android:backgroundTint="#00BCD4"
                 android:text="声纹" android:textColor="#FFFFFF" android:textSize="12sp"
                 android:contentDescription="声纹用户管理" />
+
+            <Button android:id="@+id/btnGlasses" style="@style/Widget.Material3.Button"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_margin="2dp" android:backgroundTint="#795548"
+                android:text="眼镜" android:textColor="#FFFFFF" android:textSize="12sp"
+                android:contentDescription="配对Rokid眼镜" />
 
             <Button android:id="@+id/btnExit" style="@style/Widget.Material3.Button"
                 android:layout_width="wrap_content" android:layout_height="wrap_content"

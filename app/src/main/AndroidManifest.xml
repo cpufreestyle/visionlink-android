@@ -22,6 +22,12 @@
     <!-- BLE feature -->
     <uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
 
+    <!-- Location permission (required for BLE scanning on Android < 12) -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+
+    <!-- APK install permission (for in-app updates) -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
     <application
         android:name=".VisionLinkApplication"
         android:allowBackup="true"
@@ -50,6 +56,17 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- FileProvider for APK install & file sharing -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
 
     </application>
 

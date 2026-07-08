@@ -44,14 +44,14 @@ class VoicePrintController(
                 val targetUser = currentUserId ?: voicePrintManager.getEnrolledUsers().firstOrNull()?.userId
                 if (targetUser.isNullOrEmpty()) {
                     execute()
-                    return@voicePrintGate
-                }
-                ttsManager.speak("请先验证身份")
-                voicePrintManager.startVerification(targetUser) { result ->
-                    if (result.isMatch) {
-                        execute()
-                    } else {
-                        ttsManager.speak("身份验证失败")
+                } else {
+                    ttsManager.speak("请先验证身份")
+                    voicePrintManager.startVerification(targetUser) { result ->
+                        if (result.isMatch) {
+                            execute()
+                        } else {
+                            ttsManager.speak("身份验证失败")
+                        }
                     }
                 }
             } else {

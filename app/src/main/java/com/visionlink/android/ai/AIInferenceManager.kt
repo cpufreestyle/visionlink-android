@@ -28,8 +28,6 @@ import com.visionlink.android.BuildConfig
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
-import java.io.File
-import java.io.IOException
 
 /**
  * AI Inference Manager - v4.7.0 (Real API Integration)
@@ -61,7 +59,7 @@ class AIInferenceManager(private val context: Context) {
         private const val MIN_SDK = 33
     }
 
-    enum class InferenceEngine { NONE, AICORE, EDGE, LITERT_LM, CLOUD, STEPFUN, LM_STUDIO }
+    enum class InferenceEngine { NONE, AICORE, EDGE, LITERT_LM, CLOUD, STEPFUN, LM_STUDIO, CUSTOM }
     enum class InferenceMode { SINGLE_SHOT, CONTINUOUS }
 
     data class ManagerState(
@@ -83,7 +81,11 @@ class AIInferenceManager(private val context: Context) {
     private var currentEngine: InferenceEngine = InferenceEngine.STEPFUN
     private var currentMode: InferenceMode = InferenceMode.SINGLE_SHOT
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-    private val httpClient = OkHttpClient()
+    private val httpClient = OkHttpClient.Builder()
+        .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+        .writeTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+        .build()
     private val pingHttpClient = OkHttpClient.Builder()
         .connectTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
         .readTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
@@ -128,7 +130,7 @@ class AIInferenceManager(private val context: Context) {
             Log.d(TAG, "Response body: ${responseBody?.take(200)}")
             
             if (!response.isSuccessful) {
-                return@withContext "Error ${response.code}: ${response.message}\nBody: ${responseBody?.take(200)}"
+                return@withContext "错误 ${response.code}: ${response.message}\n${responseBody?.take(200)}"
             }
             
             if (responseBody == null) {
@@ -154,7 +156,7 @@ class AIInferenceManager(private val context: Context) {
             
         } catch (e: IOException) {
             Log.e(TAG, "Network error: ${e.message}", e)
-            return@withContext "Network Error: ${e.message}\n可能网络无法访问 api.stepfun.com"
+            return@withContext "网络错误: ${e.message}\n可能网络无法访问 api.stepfun.com"
         } catch (e: Exception) {
             Log.e(TAG, "API test error: ${e.message}", e)
             return@withContext "Error: ${e.message}"
@@ -234,7 +236,25 @@ class AIInferenceManager(private val context: Context) {
         Log.d(TAG, "Engine switched to: $engine")
     }
 
-    suspend fun initialize() = withContext(Dispatchers.IO) {
+    // ========== Custom API Configuration ==========
+
+    private var customConfig: ModelApiConfig? = null
+
+    /**
+     * 设置自定义 API 配置并切换到 CUSTOM 引擎
+     */
+    fun setCustomConfig(config: ModelApiConfig) {
+        customConfig = config
+        setEngine(InferenceEngine.CUSTOM)
+        Log.d(TAG, "Custom API config set: ${config.name} -> ${config.apiUrl}")
+    }
+
+    /**
+     * 获取当前自定义配置
+     */
+    fun getCustomConfig(): ModelApiConfig? = customConfig
+
+    suspend fun initialize(): Boolean = withContext(Dispatchers.IO) {
         Log.d(TAG, "Initializing AI Inference Manager with ${currentEngine.name}")
 
         // 对 Moonshot 引擎做一次 ping 检查，验证 API Key 有效
@@ -251,8 +271,34 @@ class AIInferenceManager(private val context: Context) {
                         initError = "API Key 无效或网络不可用"
                     )
                 }
-                return@withContext
+                return@withContext false
             }
+        }
+
+        // 对自定义 API 引擎做连通性检查
+        if (currentEngine == InferenceEngine.CUSTOM) {
+            val config = customConfig
+            if (config == null) {
+                updateState {
+                    copy(
+                        engine = currentEngine,
+                        isInitialized = false,
+                        initError = "未配置自定义 API"
+                    )
+                }
+                return@withContext false
+            }
+            if (config.apiUrl.isBlank() || config.apiKey.isBlank()) {
+                updateState {
+                    copy(
+                        engine = currentEngine,
+                        isInitialized = false,
+                        initError = "API URL 和 Key 不能为空"
+                    )
+                }
+                return@withContext false
+            }
+            Log.i(TAG, "Custom API [${config.name}] configured: ${config.apiUrl}")
         }
 
         updateState {
@@ -265,6 +311,7 @@ class AIInferenceManager(private val context: Context) {
             )
         }
         Log.d(TAG, "AI initialized with ${currentEngine.name}")
+        true
     }
 
     /**
@@ -313,6 +360,7 @@ class AIInferenceManager(private val context: Context) {
                 InferenceEngine.STEPFUN -> callMoonshotAPI(prompt, bitmap)
                 InferenceEngine.LM_STUDIO -> runLmStudioInference(prompt, bitmap)
                 InferenceEngine.EDGE -> runEdgeInference(prompt, bitmap)
+                InferenceEngine.CUSTOM -> callCustomAPI(prompt, bitmap)
                 else -> "Unsupported engine: $currentEngine"
             }
 
@@ -393,6 +441,7 @@ class AIInferenceManager(private val context: Context) {
                         Log.e(TAG, "API call failed: ${response.code}, ${response.message}")
                         if (retryCount < maxRetries) {
                             retryCount++
+                            delay(1000)
                             continue
                         }
                         return@withContext "API 调用失败: ${response.message}"
@@ -402,11 +451,12 @@ class AIInferenceManager(private val context: Context) {
                     if (jsonResponse.has("error")) {
                         val errorMsg = jsonResponse.getJSONObject("error").getString("message")
                         Log.e(TAG, "API error: $errorMsg")
-                        if (retryCount < maxRetries) {
-                            retryCount++
-                            continue
-                        }
-                        return@withContext "API 错误: $errorMsg"
+                    if (retryCount < maxRetries) {
+                        retryCount++
+                        delay(1000)
+                        continue
+                    }
+                    return@withContext "API 错误: $errorMsg"
                     }
 
                     val choices = jsonResponse.getJSONArray("choices")
@@ -428,6 +478,7 @@ class AIInferenceManager(private val context: Context) {
                     Log.e(TAG, "Network error: ${e.message}", e)
                     if (retryCount < maxRetries) {
                         retryCount++
+                        delay(2000)
                         continue
                     }
                     return@withContext "网络错误: ${e.message}"
@@ -435,6 +486,7 @@ class AIInferenceManager(private val context: Context) {
                     Log.e(TAG, "API error: ${e.message}", e)
                     if (retryCount < maxRetries) {
                         retryCount++
+                        delay(1000)
                         continue
                     }
                     return@withContext "错误: ${e.message}"
@@ -538,6 +590,7 @@ class AIInferenceManager(private val context: Context) {
                     Log.e(TAG, "Network error: ${e.message}", e)
                     if (retryCount < maxRetries) {
                         retryCount++
+                        delay(2000)
                         continue
                     }
                     return@withContext "网络错误: 无法连接到 LM Studio ($lmStudioUrl)\n请确保:\n1. 手机和电脑在同一网络\n2. LM Studio 已启动\n3. 防火墙允许端口 1234"
@@ -545,9 +598,125 @@ class AIInferenceManager(private val context: Context) {
                     Log.e(TAG, "LM Studio error: ${e.message}", e)
                     if (retryCount < maxRetries) {
                         retryCount++
+                        delay(1000)
                         continue
                     }
                     return@withContext "LM Studio 错误: ${e.message}"
+                }
+            }
+
+            return@withContext "重试次数已用尽"
+        }
+
+    // ========== Custom API Integration (OpenAI-compatible) ==========
+
+    /**
+     * 调用用户自定义的 OpenAI 兼容 API
+     */
+    private suspend fun callCustomAPI(prompt: String, bitmap: Bitmap): String =
+        withContext(Dispatchers.IO) {
+            val config = customConfig ?: return@withContext "未配置自定义 API"
+            var retryCount = 0
+            val maxRetries = 2
+
+            while (retryCount <= maxRetries) {
+                try {
+                    val base64Image = bitmapToBase64(bitmap)
+                    if (base64Image.isEmpty()) {
+                        return@withContext "图像转换失败"
+                    }
+
+                    val jsonBody = JSONObject().apply {
+                        put("model", config.visionModel)
+                        put("temperature", TEMPERATURE)
+                        put("max_tokens", MAX_TOKENS)
+                        put("messages", JSONArray().apply {
+                            put(JSONObject().apply {
+                                put("role", "user")
+                                put("content", JSONArray().apply {
+                                    put(JSONObject().apply {
+                                        put("type", "image_url")
+                                        put("image_url", JSONObject().apply {
+                                            put("url", "data:image/jpeg;base64,$base64Image")
+                                        })
+                                    })
+                                    put(JSONObject().apply {
+                                        put("type", "text")
+                                        put("text", prompt)
+                                    })
+                                })
+                            })
+                        })
+                    }
+
+                    val requestBody = jsonBody.toString()
+                        .toRequestBody("application/json".toMediaType())
+
+                    val request = Request.Builder()
+                        .url(config.apiUrl)
+                        .addHeader("Authorization", "Bearer ${config.apiKey}")
+                        .addHeader("Content-Type", "application/json")
+                        .post(requestBody)
+                        .build()
+
+                    Log.d(TAG, "Calling Custom API [${config.name}] (attempt ${retryCount + 1})...")
+                    val response = httpClient.newCall(request).execute()
+                    val responseBody = response.body?.string()
+
+                    if (!response.isSuccessful || responseBody == null) {
+                        Log.e(TAG, "Custom API call failed: ${response.code}, ${response.message}")
+                        if (retryCount < maxRetries) {
+                            retryCount++
+                            delay(1000)
+                            continue
+                        }
+                        return@withContext "API 调用失败 [${config.name}]: ${response.code} ${response.message}"
+                    }
+
+                    val jsonResponse = JSONObject(responseBody)
+                    if (jsonResponse.has("error")) {
+                        val errorMsg = jsonResponse.getJSONObject("error").getString("message")
+                        Log.e(TAG, "Custom API error: $errorMsg")
+                        if (retryCount < maxRetries) {
+                            retryCount++
+                            delay(1000)
+                            continue
+                        }
+                        return@withContext "API 错误 [${config.name}]: $errorMsg"
+                    }
+
+                    val choices = jsonResponse.getJSONArray("choices")
+                    if (choices.length() > 0) {
+                        val content = choices.getJSONObject(0)
+                            .getJSONObject("message")
+                            .getString("content")
+                        Log.d(TAG, "Custom API success: ${content.take(100)}")
+                        return@withContext content.trim()
+                    }
+
+                    if (retryCount < maxRetries) {
+                        retryCount++
+                        delay(1000)
+                        continue
+                    }
+                    return@withContext "API 返回为空"
+
+                } catch (e: IOException) {
+                    Log.e(TAG, "Custom API network error: ${e.message}", e)
+                    if (retryCount < maxRetries) {
+                        retryCount++
+                        delay(2000)
+                        continue
+                    }
+                    return@withContext "网络错误 [${config.name}]: ${e.message}"
+                } catch (e: Exception) {
+                    Log.e(TAG, "Custom API error: ${e.message}", e)
+                    if (retryCount < maxRetries) {
+                        retryCount++
+                        delay(1000)
+                        continue
+                    }
+                    return@withContext "错误 [${config.name}]: ${e.message}"
                 }
             }
 

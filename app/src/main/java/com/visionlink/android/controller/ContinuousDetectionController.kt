@@ -13,6 +13,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.CancellationException
 
 /**
  * 连续检测控制器 — 管理连续拍照分析循环

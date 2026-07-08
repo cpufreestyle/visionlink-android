@@ -61,16 +61,16 @@ class GuideModeController(
 
         if (lockedTarget != null) {
             // 查找锁定目标
-            val target = objects.find { it.label == lockedTarget || it.labelCn == lockedTarget }
+            val target = objects.find { it.label == lockedTarget || it.labelZh == lockedTarget }
             if (target != null) {
-                return guidanceEngine.generateGuidanceText(target)
+                return "${target.labelZh}，${guidanceEngine.directionPhrase(target.box)}，${guidanceEngine.distancePhrase(target)}"
             } else {
                 return "目标已丢失，请重新寻找"
             }
         } else if (objects.isNotEmpty()) {
             // 播报最近/最危险的物体
             val nearest = objects.minByOrNull { it.box.centerY }
-            return guidanceEngine.generateGuidanceText(nearest!!)
+            return "${nearest!!.labelZh}，${guidanceEngine.directionPhrase(nearest.box)}，${guidanceEngine.distancePhrase(nearest)}"
         }
         return null
     }

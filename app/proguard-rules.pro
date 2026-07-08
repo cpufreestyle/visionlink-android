@@ -48,11 +48,22 @@
 -keep class org.pytorch.** { *; }
 -dontwarn org.pytorch.**
 
-# ============ CXR-M SDK 保护 (如果集成) ============
+# ============ CXR-L SDK 保护 ============
 
-# 取消注释当集成真实 CXR-M SDK 时
-# -keep class com.Rokid.cxrm.** { *; }
-# -keep interface com.Rokid.cxrm.** { *; }
+# 保护 Rokid CXR-L SDK
+-keep class com.rokid.cxr.** { *; }
+-keep interface com.rokid.cxr.** { *; }
+-keep class com.rokid.cxr.link.** { *; }
+-keep class com.rokid.cxr.link.callbacks.** { *; }
+-keep class com.rokid.cxr.link.utils.** { *; }
+-keep class com.rokid.cxr.Caps { *; }
+-keep class com.rokid.cxr.Caps$* { *; }
+
+# 保护 Rokid Sprite AI App 外部接口
+-keep class com.rokid.sprite.aiapp.externalapp.** { *; }
+-keep class com.rokid.sprite.aiapp.externalapp.auth.** { *; }
+-keep class com.rokid.sprite.aiapp.externalapp.example.** { *; }
+-dontwarn com.rokid.**
 
 # ============ Kotlin 协程 ============
 
@@ -88,7 +99,12 @@
 -keepattributes SourceFile,LineNumberTable
 -renamesourcefileattribute SourceFile
 
-# ============ 移除日志 (Release 构建) ============
+# ============ CrashReporter 保护 ============
+
+-keep class com.visionlink.android.utils.CrashReporter { *; }
+-keep class com.visionlink.android.utils.CrashReporter$Companion { *; }
+
+# 移除日志 (Release 构建)
 
 -assumenosideeffects class android.util.Log {
     public static boolean isLoggable(java.lang.String, int);
@@ -112,3 +128,12 @@
 -dontwarn org.tensorflow.lite.**
 -dontwarn androidx.camera.**
 -dontwarn okio.**
+
+# R8 缺失类抑制 (javax.lang.model 来自注解处理器，不在 Android 运行时)
+-dontwarn javax.lang.model.SourceVersion
+-dontwarn javax.lang.model.element.Element
+-dontwarn javax.lang.model.element.ElementKind
+-dontwarn javax.lang.model.element.Modifier
+-dontwarn javax.lang.model.type.TypeMirror
+-dontwarn javax.lang.model.type.TypeVisitor
+-dontwarn javax.lang.model.util.SimpleTypeVisitor8

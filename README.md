@@ -1,11 +1,11 @@
-﻿# VisionLink Android - 全离线端侧 AI 助盲眼镜
+﻿# VisionLink Android - AI 助盲智能眼镜
 
-> 基于 Gemma 4 E2B 的全离线端侧 AI 助盲眼镜 Android 实现  
-> 对应 PC 版: [VisionLink-AI-Glasses](https://github.com/cpufreestyle/visionlink-android)
+> 基于 Android 的多模态 AI 助盲眼镜系统，支持端侧推理与云端 API 双模式  
+> 当前版本: **v5.3.0**
 
 [![Android](https://img.shields.io/badge/Android-13+-green.svg)](https://www.android.com/)
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.0.0-blue.svg)](https://kotlinlang.org/)
-[![LiteRT-LM](https://img.shields.io/badge/LiteRT--LM-1.0.0-orange.svg)](https://developers.google.com/litert-lm)
+[![Version](https://img.shields.io/badge/version-5.3.0-orange.svg)](https://github.com/cpufreestyle/visionlink-android/releases)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ---
@@ -14,589 +14,387 @@
 
 - [项目简介](#项目简介)
 - [功能特性](#功能特性)
-- [技术架构](#技术架构)
-- [快速开始](#快速开始)
+- [下载安装](#下载安装)
 - [使用说明](#使用说明)
-- [开发文档](#开发文档)
-- [API 参考](#api-参考)
+- [技术架构](#技术架构)
+- [多模型 API 配置](#多模型-api-配置)
+- [崩溃日志自动上报](#崩溃日志自动上报)
+- [项目结构](#项目结构)
+- [编译构建](#编译构建)
 - [故障排除](#故障排除)
-- [贡献指南](#贡献指南)
+- [更新日志](#更新日志)
 - [许可证](#许可证)
 
 ---
 
 ## 🎯 项目简介
 
-**VisionLink Android** 是将 PC 版 [VisionLink-AI-Glasses](https://github.com/cpufreestyle/visionlink-android) 移植到 Android 的全离线端侧 AI 助盲眼镜系统。
+**VisionLink Android** 是一套面向视障用户的多模态 AI 助盲眼镜系统。通过手机摄像头捕获图像，利用 AI 大模型进行实时分析，并通过语音播报和智能眼镜 HUD 将结果传达给用户。
 
 ### 核心亮点
 
-- ✅ **全离线运行**: 无需网络，所有 AI 推理在手机本地完成
-- ✅ **低延迟**: 端侧推理，响应速度快
-- ✅ **隐私保护**: 图像数据不上传云端
-- ✅ **眼镜集成**: 通过 CXR-L SDK 连接智能眼镜 (Rokid)
-- ✅ **多模式**: 避障、文字阅读、场景描述三种模式
-
-### 对应 PC 版功能映射
-
-| PC 版 (Python/PowerShell) | Android 版 (Kotlin) | 状态 |
-|---------------------------|---------------------|------|
-| `main.py` | `MainActivity.kt` | ✅ 完成 |
-| `cv2.VideoCapture()` | CameraX | ✅ 完成 |
-| `ollama.chat()` (Gemma 4) | LiteRT-LM | ✅ 完成 (模拟) |
-| `speak()` (TTS) | Android TTS | ✅ 完成 |
-| `CXR-L SDK` | CXR-L AIDL | 🔧 模拟 (需真实 SDK) |
-| OpenCV 显示 | HUD Layout | ✅ 完成 |
+- ✅ **多引擎支持** — 端侧推理（Gemma 4 E2B）+ 云端 API（StepFun / 自定义 OpenAI 兼容 API）+ 本地推理（LM Studio）
+- ✅ **四种辅助模式** — 障碍物检测、文字识别、场景描述、指向引导
+- ✅ **声纹识别** — ONNX 端侧声纹识别，自动辨认用户并应用个性化设置
+- ✅ **智能眼镜集成** — Rokid CXR-L 眼镜 HUD 显示 + 蓝牙指环遥控
+- ✅ **语音控制** — 中文语音命令，声纹门控保护敏感操作
+- ✅ **崩溃自动上报** — 崩溃日志自动上传至 GitHub Issues
+- ✅ **应用内更新** — 自动检测新版本并下载安装
 
 ---
 
 ## ✨ 功能特性
 
-### 1️⃣ 三种 AI 模式
+### 四种 AI 辅助模式
 
-| 模式 | 功能 | 对应 PC 版 | 语音输出 |
-|------|------|-----------|---------|
-| **模式1: 避障** | 识别前方障碍物并估算距离 | `prompt_obstacle` | "前方2米有台阶" |
-| **模式2: 文字阅读** | OCR 提取图片中的文字 | `prompt_ocr` | "识别到: 出口 →" |
-| **模式3: 场景描述** | 描述当前场景 | `prompt_scene` | "你在一个明亮的室内" |
+| 模式 | 功能 | 示例输出 |
+|------|------|---------|
+| **模式1: 障碍物检测** | 识别前方障碍物并估算距离方向 | "前方两米有台阶，偏左" |
+| **模式2: 文字识别** | OCR 提取图片中的中英文文字 | "出口 →" |
+| **模式3: 场景描述** | 用自然语言描述当前场景 | "你在一个明亮的室内走廊" |
+| **模式4: 指向引导** | 端侧实时手部检测 + 食指指向导航 | "您指向椅子，正前方，大约三步" |
 
-### 2️⃣ 技术栈
+模式4 使用 MediaPipe 端侧实时手部关键点检测 + 物体检测，全离线运行，支持锚点锁定与跨帧跟踪。
 
-| 模块 | 技术 | 说明 |
+### 多 AI 引擎
+
+| 引擎 | 类型 | 说明 |
 |------|------|------|
-| **LLM** | Gemma 4 E2B-it | Google 多模态大模型 (.litertlm 格式) |
-| **视觉模型** | MobileNetV3 | TensorFlow Lite (.tflite 格式) |
-| **推理框架** | LiteRT-LM + LiteRT | Google 端侧推理框架 |
-| **摄像头** | CameraX | AndroidX Camera 库 |
-| **语音** | Android TTS | 系统自带 TTS 引擎 |
-| **眼镜** | CXR-L SDK (Rokid) | 智能眼镜连接 (模拟) |
-| **架构** | 手机主控，眼镜从端 | 手机处理 AI，眼镜显示+音频 |
+| **StepFun API** | 云端 | 阶跃星辰 step-1v-8k 视觉模型，默认引擎 |
+| **自定义 API** | 云端 | 支持 DeepSeek、通义千问、Moonshot、OpenAI 等 OpenAI 兼容 API |
+| **LM Studio** | 局域网 | 连接 PC 上运行的 LM Studio，OpenAI 兼容协议 |
+| **Edge (Gemma 4)** | 端侧 | Google LiteRT-LM + Gemma 3n E2B，全离线推理 |
 
-### 3️⃣ 系统要求
+### 其他功能
 
-- **操作系统**: Android 13+ (API 33+)
-- **RAM**: 建议 6GB 以上 (运行 Gemma 4 E2B 需要 4GB+)
-- **存储**: 建议 8GB 可用空间 (模型文件约 4GB)
-- **摄像头**: 后置摄像头 (建议 720p 以上)
-- **眼镜**: CXR-L 兼容智能眼镜 (可选)
+- **声纹识别** — ONNX Runtime 端侧推理，注册用户后自动辨认，应用个性化模式/语言/语速设置
+- **语音命令** — 中文语音控制（拍照、切模式、连续检测等），敏感操作声纹门控
+- **蓝牙指环** — BLE 指环遥控器，按键拍照/切模式
+- **眼镜 HUD** — Rokid CXR-L 眼镜 HUD 显示分析结果
+- **连续检测** — 自动循环拍照分析播报，适合行走场景
+- **自动更新** — 应用启动时检查 GitHub Release 新版本
+- **崩溃上报** — UncaughtExceptionHandler 自动捕获崩溃，下次启动上传 GitHub Issue
+
+---
+
+## 📥 下载安装
+
+### 直接下载 APK
+
+从 GitHub Releases 下载最新版本：
+
+👉 **[v5.3.0 下载](https://github.com/cpufreestyle/visionlink-android/releases/download/v5.3.0/visionlink-android-v5.3.0.apk)**
+
+### 系统要求
+
+- **Android 13+** (API 33+)
+- **RAM**: 建议 6GB 以上（端侧推理需要 4GB+）
+- **存储**: 约 200MB（APK），端侧模型另需约 4GB
+- **摄像头**: 后置摄像头
+- **眼镜**: Rokid CXR-L 兼容智能眼镜（可选，需安装 Rokid AI App）
+
+---
+
+## 📖 使用说明
+
+### 首次启动
+
+1. 安装 APK，授予摄像头、麦克风、蓝牙权限
+2. 点击 **"Init AI"** 初始化 AI 引擎（默认 StepFun API）
+3. 选择模式，点击 **"拍照分析"** 或开启 **"连续检测"**
+
+### 模式切换
+
+| 操作 | 功能 |
+|------|------|
+| 点击 **"障碍物"** | 切换到障碍物检测模式 |
+| 点击 **"文字"** | 切换到文字识别模式 |
+| 点击 **"场景"** | 切换到场景描述模式 |
+| 点击 **"指向引导"** | 进入/退出指向引导模式 |
+
+### 设置菜单
+
+点击底部 **"设置"** 按钮：
+
+- **语言切换** — 中文 / English
+- **语音命令** — 开启/关闭语音控制
+- **蓝牙指环** — 扫描/断开 BLE 指环
+- **连接眼镜** — 通过 Rokid AI App 授权连接 CXR-L 眼镜
+- **模型 API 设置** — 添加/管理自定义 AI API 配置
+
+### 连接 Rokid 眼镜
+
+1. 确保已安装 **Rokid AI App** 并完成眼镜配对
+2. 点击 **"眼镜"** 按钮或设置 → 连接眼镜
+3. 在 Rokid AI App 中授权
+4. 授权成功后，分析结果会同步显示在眼镜 HUD 上
+
+> 授权超时保护为 120 秒，连接超时为 60 秒。如果超时，请重试。
 
 ---
 
 ## 🏗️ 技术架构
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                   VisionLink Android                  │
-├─────────────────────────────────────────────────────┤
-│                                                      │
-│  ┌────────────┐    ┌────────────┐    ┌────────────┐ │
-│  │  UI Layer  │    │  AI Layer   │    │ Audio Layer│ │
-│  │             │    │             │    │             ││
-│  │ MainActivity│◄──►│ AIManager  │◄──►│ TTSManager ││
-│  │   (HUD)    │    │ (Gemma 4)  │    │  (Android)  ││
-│  └────────────┘    └────────────┘    └────────────┘ │
-│         ▲                  ▲                  ▲       │
-│         │                  │                  │       │
-│  ┌──────┴──────┐   ┌──────┴──────┐   ┌──────┴──────┐│
-│  │ Camera Layer│   │Vision Model │   │Glasses Layer││
-│  │             │   │             │   │              ││
-│  │CameraManager│   │TFLite (.tflite)│   │CXRManager  ││
-│  │(CameraX)    │   │(MobileNetV3)│   │(CXRM SDK)  ││
-│  └─────────────┘   └─────────────┘   └─────────────┘│
-│                                                      │
-└─────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────┐
+│                    VisionLink Android v5.3                 │
+├──────────────────────────────────────────────────────────┤
+│                                                           │
+│  ┌─────────────┐  ┌──────────────┐  ┌─────────────────┐  │
+│  │  UI Layer    │  │  AI Layer     │  │  Audio Layer     │  │
+│  │  MainActivity│◄─►│  AIInference  │◄─►│  TTSManager     │  │
+│  │  (HUD)       │  │  Manager      │  │  VoiceManager   │  │
+│  └──────┬──────┘  └───────┬───────┘  └─────────────────┘  │
+│         │                  │                                 │
+│  ┌──────┴──────┐   ┌──────┴──────────────────────────┐    │
+│  │ Camera Layer│   │        Inference Engines          │    │
+│  │ CameraX     │   │  ┌─────────┐ ┌─────────┐        │    │
+│  └─────────────┘   │  │StepFun  │ │Custom   │        │    │
+│                    │  │API      │ │API      │        │    │
+│  ┌─────────────┐   │  └─────────┘ └─────────┘        │    │
+│  │ Glasses     │   │  ┌─────────┐ ┌─────────┐        │    │
+│  │ CXRManager  │   │  │LM Studio│ │Edge     │        │    │
+│  │ (Rokid)     │   │  │(Local)  │ │(Gemma4) │        │    │
+│  └─────────────┘   │  └─────────┘ └─────────┘        │    │
+│                    └───────────────────────────────────┘    │
+│  ┌─────────────┐  ┌──────────────┐  ┌─────────────────┐   │
+│  │ VoicePrint  │  │ Guide Mode   │  │  BLE Ring       │   │
+│  │ (ONNX)      │  │ (MediaPipe)  │  │  BleRingManager │   │
+│  └─────────────┘  └──────────────┘  └─────────────────┘   │
+│                                                           │
+│  ┌─────────────────────────────────────────────────────┐  │
+│  │              CrashReporter (auto-report)              │  │
+│  └─────────────────────────────────────────────────────┘  │
+│                                                           │
+└──────────────────────────────────────────────────────────┘
 ```
 
-### 数据流
+### 技术栈
 
-1. **摄像头捕获** → CameraX 捕获图像
-2. **ROI 裁剪** → 裁剪中心区域 (25%-75% 宽度, 20%-80% 高度)
-3. **图像预处理** → 缩放至 448x448, JPEG 压缩 (85% 质量)
-4. **AI 推理** → LiteRT-LM (Gemma 4 E2B) + LiteRT (视觉模型)
-5. **结果生成** → 根据模式生成中文描述
-6. **语音播报** → Android TTS + 眼镜音频
-7. **HUD 显示** → 手机屏幕 + 眼镜 HUD
+| 模块 | 技术 | 说明 |
+|------|------|------|
+| **AI 推理** | LiteRT-LM + OkHttp | 端侧 Gemma 4 + 云端 API |
+| **手部检测** | MediaPipe Tasks Vision | 端侧实时手部关键点 + 物体检测 |
+| **声纹识别** | ONNX Runtime | 端侧声纹特征提取与比对 |
+| **摄像头** | CameraX | AndroidX Camera 库 |
+| **语音** | Android TTS + SpeechRecognizer | 语音合成 + 语音识别 |
+| **眼镜** | Rokid CXR-L SDK | 智能眼镜连接与 HUD 显示 |
+| **蓝牙** | BLE | 蓝牙指环遥控器 |
+| **崩溃上报** | OkHttp + GitHub Issues API | 自动上传崩溃日志 |
+| **语言** | Kotlin | 全 Kotlin 实现 |
 
 ---
 
-## 🚀 快速开始
+## 🔌 多模型 API 配置
 
-### 1️⃣ 克隆项目
+v5.3.0 新增自定义 OpenAI 兼容 API 配置功能，支持任意遵循 OpenAI Chat Completions 协议的 API。
 
-```bash
-git clone https://github.com/cpufreestyle/visionlink-android.git
-cd visionlink-android
-```
+### 添加配置
 
-### 2️⃣ 下载模型文件
+1. 进入 **设置 → 模型 API 设置**
+2. 点击 **"添加新配置"**
+3. 填写以下信息：
 
-#### 方法 A: 自动下载 (推荐)
+| 字段 | 说明 | 示例 |
+|------|------|------|
+| 配置名称 | 用于识别的名称 | `DeepSeek` |
+| API URL | Chat Completions 端点 | `https://api.deepseek.com/v1/chat/completions` |
+| API Key | 你的 API 密钥 | `sk-xxxxxxxx` |
+| 视觉模型名 | 支持图片输入的模型 | `deepseek-chat` |
+| 文本模型名 | 纯文本模型 | `deepseek-chat` |
 
-```powershell
-# Windows PowerShell
-.\download_models.ps1
-```
+### 支持的 API 提供商
 
-#### 方法 B: 手动下载
+| 提供商 | API URL | 推荐模型 |
+|--------|---------|---------|
+| DeepSeek | `https://api.deepseek.com/v1/chat/completions` | `deepseek-chat` |
+| 通义千问 | `https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions` | `qwen-vl-max` |
+| Moonshot | `https://api.moonshot.cn/v1/chat/completions` | `moonshot-v1-8k-vision-preview` |
+| OpenAI | `https://api.openai.com/v1/chat/completions` | `gpt-4o` |
+| LM Studio | `http://<PC_IP>:1234/v1/chat/completions` | `local-model` |
 
-1. **Gemma 4 E2B 模型** (.litertlm)
-   - 访问: https://developers.google.com/litert-lm/docs/get-started
-   - 下载: `gemma-4-e2b-it.litertlm` (约 4GB)
-   - 放入: `app/src/main/assets/models/`
+### 管理配置
 
-2. **视觉模型** (.tflite)
-   - 访问: https://www.tensorflow.org/lite/models
-   - 下载: `mobilenet_v3.tflite` (约 10MB)
-   - 放入: `app/src/main/assets/models/`
-
-### 3️⃣ 编译项目
-
-```bash
-# Windows
-.\gradlew.bat assembleDebug
-
-# Linux/Mac
-./gradlew assembleDebug
-```
-
-### 4️⃣ 安装到设备
-
-```bash
-# 连接 Android 设备 (USB 调试已开启)
-.\gradlew.bat installDebug
-```
+- **切换**: 点击列表中的配置即可切换
+- **编辑**: 长按配置 → 编辑
+- **删除**: 长按配置 → 删除
+- 配置持久化存储，重启后自动恢复上次选中的 API
 
 ---
 
-## 📖 使用说明
+## 📊 崩溃日志自动上报
 
-### 启动应用
+App 内置 `CrashReporter`，实现全自动的"崩溃-保存-重启-上传"闭环：
 
-1. 授予权限 (摄像头、麦克风、存储)
-2. 主界面显示摄像头预览
+1. **崩溃捕获** — `UncaughtExceptionHandler` 捕获原生崩溃，写入本地文件
+2. **下次启动上传** — App 重新启动时检测到崩溃日志，自动上传到 GitHub Issue
+3. **关键错误上报** — 相机、AI 推理、眼镜连接、连续检测等关键位置的异常自动上报
+4. **无 Token 保底** — 即使未配置 GitHub Token，错误日志仍保留在本地文件
 
-### 模式切换
+### 启用自动上传
 
-| 操作 | 功能 |
-|------|------|
-| 点击 **"模式1: 避障"** | 切换到避障模式 |
-| 点击 **"模式2: 文字"** | 切换到文字阅读模式 |
-| 点击 **"模式3: 场景"** | 切换到场景描述模式 |
+在 SharedPreferences 中配置 GitHub Personal Access Token：
 
-### 识别图像
+```kotlin
+val prefs = getSharedPreferences("visionlink", Context.MODE_PRIVATE)
+prefs.edit().putString("github_report_token", "ghp_your_token_here").apply()
+```
 
-1. 将摄像头对准目标
-2. 点击 **"📷 识别"** 按钮
-3. 等待 AI 推理 (约 1-2 秒)
-4. 听取语音播报 + 查看屏幕结果
-
-### 连接眼镜 (可选)
-
-1. 确保 CXR-L 兼容眼镜已开机
-2. 应用会自动连接 (显示 "眼镜已连接")
-3. 语音会自动输出到眼镜音频
+Token 需要 `repo` 权限以创建 Issue。未配置时日志只保留在本地 `crash_logs/` 目录。
 
 ---
 
-## 🛠️ 开发文档
-
-### 项目结构
+## 📁 项目结构
 
 ```
 visionlink-android/
 ├── app/
-│   ├── build.gradle.kts          # App 级构建配置
-│   ├── proguard-rules.pro        # 混淆规则
-│   └── src/
-│       ├── main/
-│       │   ├── AndroidManifest.xml
-│       │   ├── java/com/visionlink/android/
-│       │   │   ├── ui/
-│       │   │   │   └── MainActivity.kt    # 主界面
-│       │   │   ├── ai/
-│       │   │   │   └── AIInferenceManager.kt  # AI 推理
-│       │   │   ├── camera/
-│       │   │   │   └── CameraManager.kt  # 摄像头
-│       │   │   ├── audio/
-│       │   │   │   └── TTSManager.kt   # TTS
-│       │   │   └── glasses/
-│       │   │       └── CXRGlassesManager.kt  # 眼镜
-│       │   └── res/layout/
-│       │       └── activity_main.xml    # HUD 布局
-│       └── test/
-│           └── java/com/visionlink/android/ai/
-│               └── AIInferenceManagerTest.kt  # 单元测试
-├── build.gradle.kts             # 项目级构建配置
-├── settings.gradle.kts          # 项目设置
-├── gradlew.bat                  # Windows Gradle 脚本
-├── download_models.ps1          # 模型下载脚本
-└── README.md                    # 本文档
-```
-
-### 核心类说明
-
-#### 1. `MainActivity.kt`
-
-**功能**: 主界面 + HUD 显示  
-**对应 PC 版**: `main.py`
-
-```kotlin
-// 模式切换
-binding.btnMode1.setOnClickListener {
-    currentMode = 1  // 避障模式
-    updateModeUI()
-}
-
-// 拍照识别
-private fun captureAndAnalyze() {
-    cameraManager.capture { bitmap ->
-        val result = aiManager.analyzeImage(bitmap, currentMode)
-        speak(result)  // 语音播报
-    }
-}
-```
-
-#### 2. `AIInferenceManager.kt`
-
-**功能**: Gemma 4 E2B 推理  
-**对应 PC 版**: `ollama.chat()`
-
-```kotlin
-// 初始化模型
-suspend fun initialize() {
-    val modelFile = copyAssetToCache("models/gemma-4-e2b-it.litertlm")
-    gemmaModel = LiteRTLM.createFromFile(modelFile, options)
-}
-
-// 分析图像
-suspend fun analyzeImage(bitmap: Bitmap, mode: Int): String {
-    val prompt = buildPrompt(mode)  // 根据模式生成 Prompt
-    return gemmaModel.generate(prompt, bitmapToBase64(bitmap))
-}
-```
-
-#### 3. `CameraManager.kt`
-
-**功能**: CameraX 摄像头管理  
-**对应 PC 版**: `cv2.VideoCapture()`
-
-```kotlin
-// 启动摄像头
-fun startCamera() {
-    val cameraProvider = ProcessCameraProvider.getInstance(context).get()
-    cameraProvider.bindToLifecycle(lifecycleOwner, cameraSelector, preview, imageCapture)
-}
-
-// 拍照
-fun capture(callback: (Bitmap?) -> Unit) {
-    imageCapture.takePicture(outputOptions, executor, callback)
-}
+│   ├── build.gradle.kts                    # App 构建配置
+│   └── src/main/
+│       ├── AndroidManifest.xml
+│       ├── assets/
+│       │   ├── mediapipe/                  # MediaPipe 模型
+│       │   └── models/voiceprint/          # 声纹识别 ONNX 模型
+│       ├── java/com/visionlink/android/
+│       │   ├── ui/
+│       │   │   └── MainActivity.kt         # 主界面 + 交互逻辑
+│       │   ├── ai/
+│       │   │   ├── AIInferenceManager.kt   # AI 推理管理（多引擎）
+│       │   │   ├── ModelApiConfig.kt        # 自定义 API 配置模型
+│       │   │   ├── ModelApiConfigDialog.kt  # API 配置对话框
+│       │   │   └── HandGuideManager.kt     # 指向引导引擎
+│       │   ├── camera/
+│       │   │   └── CameraManager.kt        # CameraX 摄像头管理
+│       │   ├── audio/
+│       │   │   ├── TTSManager.kt           # 语音合成
+│       │   │   └── VoiceCommandManager.kt  # 语音命令识别
+│       │   ├── glasses/
+│       │   │   ├── CXRGlassesManager.kt    # Rokid 眼镜管理
+│       │   │   └── RokidCxrHelper.kt       # CXR-L SDK 封装
+│       │   ├── bluetooth/
+│       │   │   └── BleRingManager.kt       # BLE 指环遥控
+│       │   ├── voiceprint/
+│       │   │   ├── VoicePrintManager.kt    # 声纹识别管理
+│       │   │   ├── VoicePrintDialog.kt     # 声纹用户管理界面
+│       │   │   └── UserPreferencesDialog.kt # 用户偏好设置
+│       │   ├── controller/
+│       │   │   ├── ContinuousDetectionController.kt
+│       │   │   ├── GuideModeController.kt
+│       │   │   └── VoicePrintController.kt
+│       │   └── utils/
+│       │       ├── CrashReporter.kt        # 崩溃日志自动上报
+│       │       ├── AppUpdateChecker.kt     # 应用更新检查
+│       │       ├── ApkDownloader.kt        # APK 下载安装
+│       │       └── UpdateDialog.kt         # 更新对话框
+│       └── res/
+│           ├── layout/activity_main.xml     # 主界面布局
+│           ├── values/strings.xml           # 字符串资源
+│           └── values-zh/strings.xml        # 中文字符串
+├── build.gradle.kts                         # 项目级构建配置
+└── README.md
 ```
 
 ---
 
-## 📚 API 参考
+## 🔧 编译构建
 
-### `AIInferenceManager`
+### 环境要求
 
-```kotlin
-class AIInferenceManager(context: Context) {
-    
-    /**
-     * 初始化 AI 模型
-     */
-    suspend fun initialize()
-    
-    /**
-     * 分析图像
-     * @param bitmap 摄像头捕获的图像
-     * @param mode 当前模式 (1=避障, 2=文字, 3=场景)
-     * @return AI 分析结果文本
-     */
-    suspend fun analyzeImage(bitmap: Bitmap, mode: Int): String
-    
-    /**
-     * 释放资源
-     */
-    fun release()
-}
+- Android Studio Hedgehog+
+- JDK 17
+- Android SDK 35 (compileSdk)
+- Kotlin 2.0+
+
+### 配置 API Key
+
+在项目根目录创建 `local.properties`：
+
+```properties
+stepfun.api.key=your_stepfun_api_key
+stepfun.api.key.test=your_stepfun_test_key
+lmstudio.url=http://172.16.20.242:1234/v1/chat/completions
 ```
 
-### `CXRGlassesManager`
-
-```kotlin
-class CXRGlassesManager(context: Context) {
-    
-    /**
-     * 连接眼镜
-     * @param callback 连接状态回调 (true=成功, false=失败)
-     */
-    fun connect(callback: (Boolean) -> Unit)
-    
-    /**
-     * 发送文本到眼镜 HUD
-     * @param text 要显示的文本
-     */
-    fun sendText(text: String)
-    
-    /**
-     * 播放音频到眼镜
-     * @param text 要语音播报的文本
-     */
-    fun playAudio(text: String)
-    
-    /**
-     * 断开连接
-     */
-    fun disconnect()
-}
-```
-
----
-
-## 🔧 故障排除
-
-### 问题 1: 模型加载失败
-
-**症状**: 应用启动时提示 "模型未初始化"
-
-**原因**: 模型文件未下载或路径错误
-
-**解决**:
-1. 运行 `download_models.ps1` 下载模型
-2. 检查 `app/src/main/assets/models/` 目录是否有模型文件
-3. 确认模型文件名正确
-
-### 问题 2: 摄像头无法启动
-
-**症状**: 黑屏或提示 "摄像头启动失败"
-
-**原因**: 权限未授予或摄像头被占用
-
-**解决**:
-1. 检查应用权限 (设置 → 应用 → 权限 → 摄像头)
-2. 关闭其他使用摄像头的应用
-3. 重启设备
-
-### 问题 3: TTS 无语音输出
-
-**症状**: 识别完成但无语音
-
-**原因**: TTS 引擎未安装或语言包缺失
-
-**解决**:
-1. 安装 Google TTS 引擎 (Play 商店)
-2. 下载中文语音包 (设置 → 语言和输入法 → 文字转语音 → 齿轮图标 → 安装语音数据)
-3. 重启应用
-
-### 问题 4: 眼镜无法连接
-
-**症状**: 显示 "眼镜未连接"
-
-**原因**: CXR-L SDK 未集成或眼镜未开机
-
-**解决**:
-1. 确认眼镜已开机并进入配对模式
-2. 集成真实的 CXR-L SDK (当前为模拟模式)
-3. 检查蓝牙权限
-
----
-
-## 🤝 贡献指南
-
-### 贡献流程
-
-1. Fork 项目
-2. 创建分支 (`git checkout -b feature/xxx`)
-3. 提交更改 (`git commit -m 'Add xxx'`)
-4. 推送到分支 (`git push origin feature/xxx`)
-5. 创建 Pull Request
-
-### 代码规范
-
-- **Kotlin**: 遵循 [Kotlin 编码规范](https://kotlinlang.org/docs/coding-conventions.html)
-- **命名**: 使用驼峰命名法 (`camelCase`)
-- **注释**: 所有 public 函数必须有 KDoc 注释
-- **测试**: 新功能必须包含单元测试
-
-### 待完成任务
-
-- [ ] 集成真实的 CXR-L SDK (当前为模拟)
-- [ ] 优化 Gemma 4 E2B 推理速度 (当前模拟)
-- [ ] 添加更多视觉模型 (YOLO, SSD)
-- [ ] 支持蓝牙眼镜连接
-- [ ] 添加用户设置界面
-
----
-
-## 🔧 打通 Gemma 4 真实推理
-
-> 本文档说明如何将模拟推理切换为 **Gemma 4 E2B 真实推理**
-> 
-> 对应 PC 版: `ollama.chat(model='gemma4:e2b')`
-
----
-
-### 步骤 1: 下载 Gemma 4 E2B 模型
-
-#### 方法 A: 自动下载 (PowerShell)
-
-```powershell
-# 进入项目目录
-cd D:\qclaw-workspace\visionlink-android
-
-# 运行下载脚本 (需要 10-30 分钟)
-.\download_models_real.ps1
-```
-
-#### 方法 B: 手动下载
-
-1. **Gemma 4 E2B** (.litertlm, 约 4GB)
-   - 来源: https://huggingface.co/google/gemma-4-e2b-it
-   - 文件: `gemma-4-e2b-it.litertlm`
-   - 放入: `app\src\main\assets\models\`
-
-2. **视觉模型** (.tflite, 约 10MB)
-   - 来源: https://www.tensorflow.org/lite/models
-   - 文件: `mobilenet_v3.tflite`
-   - 放入: `app\src\main\assets\models\`
-
----
-
-### 步骤 2: 验证模型文件
-
-```powershell
-$ModelPath = "D:\qclaw-workspace\visionlink-android\app\src\main\assets\models\gemma-4-e2b-it.litertlm"
-
-if (Test-Path $ModelPath) {
-    $SizeGB = (Get-Item $ModelPath).Length / 1GB
-    Write-Host "✅ 模型文件存在: $SizeGB GB" -ForegroundColor Green
-    
-    if ($SizeGB -lt 1) {
-        Write-Host "⚠️ 文件过小，可能下载不完整" -ForegroundColor Yellow
-    }
-} else {
-    Write-Host "❌ 模型文件不存在" -ForegroundColor Red
-}
-```
-
----
-
-### 步骤 3: 启用真实推理
-
-编辑 `AIInferenceManager.kt`，将 `MOCK_MODE` 改为 `false`：
-
-```kotlin
-companion object {
-    // ...
-    
-    // 模拟模式开关 (设置为 false 启用真实推理)
-    private const val MOCK_MODE = false  // ← 改为 false
-}
-```
-
----
-
-### 步骤 4: 编译并安装
+### 编译
 
 ```bash
-# 编译项目
-cd D:\qclaw-workspace\visionlink-android
+# Debug 版本
 .\gradlew.bat assembleDebug
 
-# 安装到设备 (USB 调试已开启)
-.\gradlew.bat installDebug
+# Release 版本
+.\gradlew.bat assembleRelease
 ```
 
----
-
-### 步骤 5: 测试真实推理
-
-1. **启动应用**
-   - 授予权限 (摄像头、麦克风)
-   - 主界面显示摄像头预览
-
-2. **初始化 AI**
-   - 点击 **"初始化 AI"** 按钮
-   - 等待提示 "✅ AI 模型已就绪"
-   - 如果失败，检查模型文件是否正确
-
-3. **测试识别**
-   - 选择模式 (避障/文字/场景)
-   - 点击 **"📷 识别"** 按钮
-   - 等待 AI 推理结果 (约 1-3 秒)
-   - 听取语音播报
+APK 输出路径：`app/build/outputs/apk/release/app-release.apk`
 
 ---
 
-### 故障排除
+## 🐛 故障排除
 
-#### 问题 1: 初始化失败 ("模型文件不存在")
+### 拍照时提示需要相机权限
 
-**原因**: 模型文件未放入正确目录
+点击拍照时如果相机权限未授予，App 会自动弹出权限请求。授权后会自动启动相机并重试拍照。
 
-**解决**:
-1. 检查文件是否存在: `app\src\main\assets\models\gemma-4-e2b-it.litertlm`
-2. 如果不存在，运行 `download_models_real.ps1` 下载
-3. 如果存在但大小 <1GB，重新下载
+### 眼镜授权超时
 
-#### 问题 2: 推理结果不正确 (乱码/无意义)
+- 授权超时为 120 秒，连接超时为 60 秒
+- 确保已安装 Rokid AI App 并完成眼镜配对
+- 授权过程中 App 会跳过 `onResume` 的相机重启，避免干扰
+- 如果超时，点击"眼镜"按钮重试
 
-**原因**: 模型文件损坏或格式不正确
+### AI 推理失败
 
-**解决**:
-1. 重新下载模型文件
-2. 验证文件 MD5 (如果有)
-3. 检查是否下载了正确的模型 (Gemma 4 E2B-it)
+- **StepFun API**: 检查网络连接，确认 API Key 有效
+- **自定义 API**: 在设置 → 模型 API 设置中检查 URL 和 Key
+- **LM Studio**: 确保手机和电脑在同一网络，LM Studio 已启动并加载模型
+- **Edge (Gemma)**: 确认模型文件已下载到 `filesDir/litert_models/` 目录
 
-#### 问题 3: 应用崩溃 (OutOfMemoryError)
+### TTS 无语音
 
-**原因**: 设备 RAM 不足 (Gemma 4 E2B 需要 4GB+ RAM)
+1. 安装 Google TTS 引擎（Play 商店）
+2. 下载中文语音包（设置 → 语言和输入法 → 文字转语音）
+3. 重启应用
 
-**解决**:
-1. 关闭其他应用释放内存
-2. 使用更低参数量的模型 (如 Gemma 2B)
-3. 在 `build.gradle.kts` 中启用 `android:largeHeap="true"`
+### 应用崩溃后无日志上传
 
----
-
-### 性能优化
-
-#### 1. 使用 GPU 加速
-
-在 `AIInferenceManager.kt` 中：
-
-```kotlin
-// 启用 GPU 加速 (如果设备支持)
-val options = LiteRTLMOptions.builder()
-    .setTemperature(TEMPERATURE)
-    .setMaxTokens(MAX_TOKENS)
-    .setUseGPU(true)  // ← 添加这行
-    .build()
-```
-
-#### 2. 减少推理 Token 数
-
-```kotlin
-private const val MAX_TOKENS = 128  // 从 256 减少到 128，加快推理速度
-```
-
-#### 3. 使用量化模型
-
-下载 **INT8 量化版本** 的 Gemma 4 E2B (文件更小，推理更快)
+崩溃日志需要配置 GitHub Token 才能自动上传。未配置时日志保留在本地 `crash_logs/` 目录。配置方法见[崩溃日志自动上报](#崩溃日志自动上报)。
 
 ---
 
-### 下一步
+## 📝 更新日志
 
-- [ ] 集成真实的 **CXR-L SDK** (当前为模拟)
-- [ ] 优化 **Gemma 4 E2B 推理速度** (使用 GPU/NNAPI)
-- [ ] 添加 **用户设置界面** (调整温度、Token 数等)
-- [ ] 支持 **更多视觉模型** (YOLO, SSD)
+### v5.3.0
 
----
+- **新功能: 多模型 API 配置** — 支持添加任意 OpenAI 兼容 API（DeepSeek、通义千问、Moonshot、OpenAI 等），多配置管理，一键切换，持久化存储
+- **修复: HTTP 超时** — OkHttp 添加连接/读取/写入超时，避免 API 调用永久挂起
+- **修复: 重试延迟** — API 调用失败重试时增加延迟，避免立即重试加重负载
+- **修复: 测试结果中文化** — API 测试返回信息改为中文
 
-**🎉 打通完成！现在应用使用真实的 Gemma 4 E2B 模型进行推理！**
+### v5.2.0
+
+- **新功能: 崩溃日志自动上传** — 全局 UncaughtExceptionHandler + GitHub Issues API
+- **修复: 拍照权限** — 点拍照时自动检查并请求相机权限，授权后自动重试
+- **修复: 眼镜授权超时** — 超时从 60s 增加到 120s，收到结果时取消超时任务
+- **修复: 眼镜授权回调** — 超时后仍回调 false 避免 UI 卡死
+- **修复: 模式显示语言** — 模式标签跟随语言设置
+- **清理: 移除未使用的 A2A 初始化代码**
+
+### v5.1.0
+
+- 声纹用户个性化设置（模式、语言、TTS 语速/音调）
+- 声纹门控保护敏感操作
+- 应用内自动更新（GitHub Release 检测 + APK 下载安装）
+
+### v5.0.0
+
+- 端侧声纹识别（ONNX Runtime）
+- 蓝牙指环遥控器
+- 连续检测模式
+
+### v4.2.0
+
+- 模式4: 指向引导（MediaPipe 端侧实时手部+物体检测导航）
+- Rokid CXR-L 眼镜真实集成
 
 ---
 
@@ -608,17 +406,18 @@ private const val MAX_TOKENS = 128  // 从 256 减少到 128，加快推理速�
 
 ## 🙏 致谢
 
-- **Google LiteRT-LM 团队** - 提供端侧 LLM 推理框架
-- **Rokid** - 提供 CXR-L 智能眼镜 SDK
-- **TensorFlow Lite 团队** - 提供视觉模型推理框架
-- **PC 版作者** - [VisionLink-AI-Glasses](https://github.com/cpufreestyle/visionlink-android)
+- **Google LiteRT-LM** — 端侧 LLM 推理框架
+- **Google MediaPipe** — 端侧手部关键点与物体检测
+- **Rokid** — CXR-L 智能眼镜 SDK
+- **ONNX Runtime** — 端侧声纹识别推理
+- **StepFun (阶跃星辰)** — 视觉大模型 API
 
 ---
 
 ## 📧 联系方式
 
 - **Issue Tracker**: [GitHub Issues](https://github.com/cpufreestyle/visionlink-android/issues)
-- **Email**: your-email@example.com
+- **Releases**: [GitHub Releases](https://github.com/cpufreestyle/visionlink-android/releases)
 
 ---
 

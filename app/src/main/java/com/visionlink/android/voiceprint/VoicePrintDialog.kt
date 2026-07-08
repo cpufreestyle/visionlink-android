@@ -7,6 +7,8 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
+import android.widget.EditText
+import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import android.widget.ArrayAdapter
@@ -188,7 +190,7 @@ class VoicePrintDialog(
     private fun deleteUser(user: VoicePrintManager.VoicePrintUser) {
         AlertDialog.Builder(context)
             .setTitle("删除用户")
-            .setMessage("确定删除 ${user.name} 的声纹?")
+            .setMessage("确定删除 ${user.name} 的声纹")
             .setPositiveButton("删除") { _, _ ->
                 voicePrintManager.deleteUser(user.userId)
                 Toast.makeText(context, "已删除 ${user.name}", Toast.LENGTH_SHORT).show()

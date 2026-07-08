@@ -11,8 +11,8 @@ android {
         applicationId = "com.visionlink.android"
         minSdk = 31
         targetSdk = 35
-        versionCode = 50
-        versionName = "5.0.0"
+        versionCode = 53
+        versionName = "5.3.0"
 
         multiDexEnabled = true
 
@@ -105,7 +105,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
 
-    // Rokid CXR-L SDK
+    // Rokid CXR-L SDK (CXRLink + AuthorizationHelper)
     implementation("com.rokid.cxr:client-l:1.0.3")
 
     // HTTP client for API calls (also used for LM Studio connection)
@@ -125,6 +125,9 @@ dependencies {
 
     // RecyclerView (声纹用户列表)
     implementation("androidx.recyclerview:recyclerview:1.3.2")
+
+    // NanoHTTPD — lightweight embedded HTTP server for A2A Protocol
+    implementation("org.nanohttpd:nanohttpd:2.3.1")
 
     // Multidex
     implementation("androidx.multidex:multidex:2.0.1")

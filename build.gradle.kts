@@ -11,11 +11,11 @@ val localProps = java.util.Properties().apply {
     val f = rootProject.file("local.properties")
     if (f.exists()) load(f.inputStream())
 }
-ext val STEPFUN_API_KEY: String = localProps.getProperty("stepfun.api.key", "")
-ext val STEPFUN_API_KEY_TEST: String = localProps.getProperty("stepfun.api.key.test", "")
+extra["STEPFUN_API_KEY"] = localProps.getProperty("stepfun.api.key", "")
+extra["STEPFUN_API_KEY_TEST"] = localProps.getProperty("stepfun.api.key.test", "")
 
 val lmStudioUrl: String = localProps.getProperty("lmstudio.url", "http://172.16.20.242:1234/v1/chat/completions")
-ext val LM_STUDIO_URL: String = lmStudioUrl
+extra["LM_STUDIO_URL"] = lmStudioUrl
 
 tasks.register("clean") {
     delete(layout.buildDirectory)

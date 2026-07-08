@@ -1,32 +1,30 @@
 package com.visionlink.android.glasses
 
+import android.app.Activity
 import android.content.Context
-import android.bluetooth.BluetoothAdapter
-import android.bluetooth.BluetoothDevice
-import android.content.BroadcastReceiver
-import android.content.Intent
-import android.content.IntentFilter
 import android.util.Log
-import com.rokid.cxr.link.CXRLink
-import com.visionlink.android.VisionLinkApplication
+import com.visionlink.android.utils.CrashReporter
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.isActive
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
- * Rokid CXR-L SDK glasses manager.
+ * Rokid CXR-L 眼镜管理器
  *
- * Flow: Init SDK -> Authenticate (via Rokid AI App) -> Connect -> Session
+ * CXR-L 流程:
+ * 1. 检查 Rokid AI App 是否安装
+ * 2. 通过 AuthorizationHelper 请求授权 → 获取 token
+ * 3. CXRLink.connect(token) 连接眼镜
+ * 4. configCXRSession(CUSTOMVIEW) 配置会话
+ * 5. customViewOpen/Update/Close 控制 HUD
  *
  * Prerequisites:
  * - Rokid AI App >= 1.7.14 installed on device (for auth)
- * - USB-C or Bluetooth connection to glasses
+ * - Glasses paired via Rokid AI App
  */
 class CXRGlassesManager(private val context: Context) {
 
@@ -45,26 +43,28 @@ class CXRGlassesManager(private val context: Context) {
         private set
 
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
-    
-    private var bluetoothAdapter: BluetoothAdapter? = null
-    private var bluetoothReceiver: BroadcastReceiver? = null
-
-    // CXRLink instance from Application
-    private val app: VisionLinkApplication
-        get() = VisionLinkApplication.getInstance()
-
-    val cxrLink: CXRLink?
-        get() = app.sharedLink
 
     val isConnected: Boolean
-        get() = connectionState == ConnectionState.CONNECTED
+        get() = connectionState == ConnectionState.CONNECTED && RokidCxrHelper.isConnected
 
-    // ========== Connection Lifecycle ==========
+    // ========== 连接流程 ==========
 
     /**
-     * Connect to Rokid glasses - check Bluetooth connection
+     * 检查连接状态（自动重连已授权的设备）
+     *
+     * CXR-L 的连接需要 Activity 来发起授权，这里只检查蓝牙是否已连接。
+     * 真正的连接在 requestAuthAndConnect(Activity) 中发起。
+     *
+     * 注意：如果当前正在授权或连接中，跳过检查，避免覆盖状态。
      */
     fun connect(callback: (Boolean) -> Unit) {
+        // 正在授权或连接中时不覆盖状态
+        if (connectionState == ConnectionState.AUTHENTICATING ||
+            connectionState == ConnectionState.CONNECTING) {
+            Log.d(TAG, "connect() skipped: state=$connectionState")
+            return
+        }
+
         if (connectionState == ConnectionState.CONNECTED) {
             Log.w(TAG, "Already connected")
             callback(true)
@@ -73,215 +73,234 @@ class CXRGlassesManager(private val context: Context) {
 
         scope.launch {
             try {
-                connectionState = ConnectionState.CONNECTING
-                Log.i(TAG, "Checking glasses connection...")
-
-                // Check Bluetooth connection
-                bluetoothAdapter = BluetoothAdapter.getDefaultAdapter()
-                if (bluetoothAdapter == null) {
-                    errorMessage = "Bluetooth not supported"
-                    connectionState = ConnectionState.ERROR
-                    callback(false)
-                    return@launch
-                }
-
-                if (!bluetoothAdapter!!.isEnabled) {
-                    errorMessage = "Bluetooth is disabled"
-                    connectionState = ConnectionState.ERROR
-                    callback(false)
-                    return@launch
-                }
-
-                // Check if any bonded device is connected
-                val bondedDevices = bluetoothAdapter!!.bondedDevices
-                var glassesConnected = false
-                
-                Log.d(TAG, "Scanning ${bondedDevices.size} bonded Bluetooth devices:")
-                for (device in bondedDevices) {
-                    val deviceName = device.name ?: "Unknown"
-                    val isConnected = isDeviceConnected(device)
-                    Log.d(TAG, "  - $deviceName (${device.address}): connected=$isConnected")
-                    
-                    if (isConnected) {
-                        Log.i(TAG, "Found connected device: $deviceName")
-                        glassesConnected = true
-                        // Store device name for UI display
-                        connectionState = ConnectionState.CONNECTED
-                        callback(true)
-                        return@launch
-                    }
-                }
-
-                if (glassesConnected) {
+                val btConnected = RokidCxrHelper.isGlassBtConnected()
+                if (btConnected) {
+                    Log.i(TAG, "Glasses BT already connected")
                     connectionState = ConnectionState.CONNECTED
-                    Log.i(TAG, "Glasses connected via Bluetooth")
                     callback(true)
                 } else {
-                    // Try CXR-L SDK auth flow
-                    val rokAppInstalled = isRokidAppInstalled()
-                    if (rokAppInstalled) {
-                        Log.i(TAG, "Rokid AI App installed, attempting CXR-L auth...")
-                        // Placeholder for real CXR-L auth
-                        connectionState = ConnectionState.AUTHENTICATING
-                        callback(true)
-                    } else {
-                        errorMessage = "Glasses not connected. Please pair via Bluetooth or install Rokid AI App"
-                        connectionState = ConnectionState.DISCONNECTED
-                        callback(false)
-                    }
+                    Log.i(TAG, "Glasses not connected, need authorization")
+                    connectionState = ConnectionState.DISCONNECTED
+                    callback(false)
                 }
-
-            } catch (e: CancellationException) {
-                connectionState = ConnectionState.DISCONNECTED
-                callback(false)
             } catch (e: Exception) {
                 errorMessage = e.message ?: "Unknown error"
                 connectionState = ConnectionState.ERROR
-                Log.e(TAG, "Connection failed: ", e)
+                Log.e(TAG, "Connect check failed: ", e)
+                CrashReporter.reportError("GlassesConnect", "Connect check failed: ${e.message}", e)
                 callback(false)
             }
         }
     }
-    
+
     /**
-     * Check if Bluetooth device is connected
+     * 请求授权并连接眼镜
+     *
+     * 必须从 Activity 调用，会拉起 Rokid AI App 授权界面。
+     * 授权结果在 Activity.onActivityResult 中处理，调用 handleAuthResult()。
+     *
+     * @param activity 当前 Activity
+     * @return true 如果成功发起授权请求
      */
-    @Suppress("DEPRECATION")
-    private fun isDeviceConnected(device: BluetoothDevice): Boolean {
-        return try {
-            val method = device.javaClass.getMethod("isConnected")
-            method.invoke(device) as Boolean
-        } catch (e: Exception) {
-            // Fallback: assume connected if bonded
-            device.bondState == BluetoothDevice.BOND_BONDED
+    fun requestAuthAndConnect(activity: Activity): Boolean {
+        if (!RokidCxrHelper.isRokidAppInstalled(activity)) {
+            errorMessage = "Rokid AI App 未安装，请先安装 Rokid AI App"
+            connectionState = ConnectionState.ERROR
+            Log.e(TAG, errorMessage)
+            return false
+        }
+
+        connectionState = ConnectionState.AUTHENTICATING
+        Log.i(TAG, "Requesting Rokid AI App authorization...")
+        val started = RokidCxrHelper.requestAuthorization(activity)
+        if (!started) {
+            connectionState = ConnectionState.ERROR
+            errorMessage = "无法启动授权流程"
+            Log.e(TAG, errorMessage)
+        }
+        return started
+    }
+
+    /**
+     * 重置授权状态（用于超时或取消）
+     */
+    fun resetAuthState() {
+        if (connectionState == ConnectionState.AUTHENTICATING ||
+            connectionState == ConnectionState.CONNECTING) {
+            Log.w(TAG, "Resetting auth state from $connectionState")
+            connectionState = ConnectionState.DISCONNECTED
+            errorMessage = "授权超时，请重试"
         }
     }
 
     /**
-     * Called after successful authentication.
-     * Sets the CXRLink instance for session use.
+     * 处理授权结果（在 Activity.onActivityResult 中调用）
+     *
+     * @param resultCode Activity result code
+     * @param data Intent data
+     * @param callback 连接结果回调
      */
-    fun onAuthenticated(link: CXRLink) {
-        app.sharedLink = link
-        connectionState = ConnectionState.CONNECTED
-        Log.i(TAG, "CXRLink authenticated and connected")
-    }
+    fun handleAuthResult(resultCode: Int, data: android.content.Intent?, callback: (Boolean) -> Unit) {
+        // 如果状态已经不是 AUTHENTICATING，说明可能已被超时重置
+        if (connectionState != ConnectionState.AUTHENTICATING) {
+            Log.w(TAG, "handleAuthResult called but state=$connectionState, ignoring")
+            // 仍然回调 false，避免 UI 卡死
+            callback(false)
+            return
+        }
 
-    /**
-     * Check if Rokid AI App is installed on device.
-     */
-    private fun isRokidAppInstalled(): Boolean {
-        return try {
-            context.packageManager.getPackageInfo("com.rokid.ar", 0)
-            true
-        } catch (e: Exception) {
-            // Try alternative package name
-            try {
-                context.packageManager.getPackageInfo("com.rokid.hirokid", 0)
-                true
-            } catch (e2: Exception) {
-                false
+        val token = RokidCxrHelper.parseAuthResult(resultCode, data)
+        if (token == null) {
+            connectionState = ConnectionState.ERROR
+            errorMessage = "授权失败或被取消"
+            callback(false)
+            return
+        }
+
+        connectionState = ConnectionState.CONNECTING
+        Log.i(TAG, "Auth success, connecting to glasses...")
+
+        // 连接带超时，避免 onCXRLConnected 回调永不触发
+        scope.launch {
+            var callbackCalled = false
+            val connectTimeoutMs = 60_000L
+
+            // 超时保护
+            val timeoutJob = launch {
+                delay(connectTimeoutMs)
+                if (!callbackCalled) {
+                    callbackCalled = true
+                    Log.e(TAG, "Glasses connect timed out after ${connectTimeoutMs}ms")
+                    connectionState = ConnectionState.ERROR
+                    errorMessage = "眼镜连接超时，请确保眼镜已开机并配对"
+                    CrashReporter.reportError("GlassesConnect", "Glasses connect timed out after ${connectTimeoutMs}ms")
+                    callback(false)
+                }
+            }
+
+            // 实际连接
+            RokidCxrHelper.connect(context, token) { connected ->
+                if (!callbackCalled) {
+                    callbackCalled = true
+                    timeoutJob.cancel()
+                    if (connected) {
+                        connectionState = ConnectionState.CONNECTED
+                        errorMessage = ""
+                        Log.i(TAG, "Glasses connected: ${RokidCxrHelper.getDeviceName()}")
+                    } else {
+                        connectionState = ConnectionState.ERROR
+                        errorMessage = "眼镜连接失败"
+                        Log.e(TAG, "Glasses connect failed")
+                    }
+                    callback(connected)
+                }
             }
         }
     }
 
-    // ========== HUD Display ==========
+    // ========== HUD 显示 ==========
 
     /**
-     * Send text to glasses HUD display.
-     * CXRLink provides openCustomView/updateCustomView/closeCustomView.
+     * 在眼镜 HUD 上显示文本
      */
     fun sendText(text: String) {
-        val link = cxrLink ?: run {
+        if (!isConnected) {
             Log.w(TAG, "Cannot send text: not connected")
             return
         }
         if (text.isBlank()) return
-
         try {
-            // Use CXRLink custom view API for HUD display
-            // val json = """{"type":"text","content":""}"""
-            // link.openCustomView(json)
-            // or link.updateCustomView(json) if already showing
-            Log.d(TAG, "HUD: ")
+            RokidCxrHelper.showText(text)
+            Log.d(TAG, "HUD: $text")
         } catch (e: Exception) {
-            Log.e(TAG, "sendText failed: ")
+            Log.e(TAG, "sendText failed: ${e.message}")
+        }
+    }
+
+    /**
+     * 更新 HUD 显示的文本
+     */
+    fun updateText(text: String) {
+        if (!isConnected) return
+        try {
+            RokidCxrHelper.updateText(text)
+        } catch (e: Exception) {
+            Log.e(TAG, "updateText failed: ${e.message}")
+        }
+    }
+
+    /**
+     * 关闭 HUD
+     */
+    fun closeHUD() {
+        if (!isConnected) return
+        try {
+            RokidCxrHelper.closeCustomView()
+        } catch (e: Exception) {
+            Log.e(TAG, "closeHUD failed: ${e.message}")
         }
     }
 
     fun updateHUDStatus(mode: Int, status: String) {
         if (!isConnected) return
         val modeText = when (mode) {
-            1 -> "ObstacleAvoid"
-            2 -> "TextReading"
-            3 -> "SceneDesc"
-            else -> "Unknown"
+            1 -> "障碍物检测"
+            2 -> "文字识别"
+            3 -> "场景描述"
+            4 -> "指向引导"
+            else -> "未知"
         }
-        sendText("\n")
+        sendText("$modeText\n$status")
     }
 
     fun showResult(result: String) {
         if (!isConnected) return
-        val short = if (result.length > 50) result.take(47) + "..." else result
-        sendText("Result:\n")
+        val short = if (result.length > 100) result.take(97) + "..." else result
+        sendText(short)
     }
 
-    // ========== Audio ==========
+    // ========== 设备信息 ==========
 
-    fun playAudio(text: String) {
-        if (!isConnected || text.isBlank()) return
-        // Audio output to glasses is handled by CXRLink audio channel
-        Log.d(TAG, "Audio to glasses: ")
+    fun getDeviceName(): String {
+        return RokidCxrHelper.getDeviceName()
     }
 
-    // ========== Button/Gesture Events ==========
-
-    fun setButtonCallback(callback: (keyCode: Int, action: Int) -> Unit) {
-        val link = cxrLink ?: return
-        // CXRLink supports subscribing to custom commands from glasses
-        // link.subscribe(clientKey, callback)
-        Log.d(TAG, "Button callback registered")
+    fun getBatteryLevel(): Int {
+        return RokidCxrHelper.getBatteryLevel()
     }
 
-    // ========== Lifecycle ==========
+    // ========== 生命周期 ==========
 
     fun disconnect() {
         if (connectionState == ConnectionState.DISCONNECTED) return
         try {
-            app.resetSession()
+            RokidCxrHelper.disconnect()
             connectionState = ConnectionState.DISCONNECTED
             errorMessage = ""
-            Log.i(TAG, "Glasses disconnected, session reset")
+            Log.i(TAG, "Glasses disconnected")
         } catch (e: Exception) {
-            Log.e(TAG, "Disconnect error: ")
+            Log.e(TAG, "Disconnect error: ${e.message}")
         }
     }
 
     fun release() {
         try {
             disconnect()
-            bluetoothReceiver?.let {
-                try {
-                    context.unregisterReceiver(it)
-                } catch (e: Exception) {
-                    Log.w(TAG, "Receiver unregister error: ${e.message}")
-                }
-            }
-            bluetoothAdapter = null
+            RokidCxrHelper.release()
             scope.cancel("GlassesManager released")
             Log.i(TAG, "Glasses manager released")
         } catch (e: Exception) {
-            Log.w(TAG, "Release error: ")
+            Log.w(TAG, "Release error: ${e.message}")
         }
     }
 
     fun getConnectionStatusText(): String {
         return when (connectionState) {
-            ConnectionState.DISCONNECTED -> "Glasses not connected"
-            ConnectionState.AUTHENTICATING -> "Authenticating..."
-            ConnectionState.CONNECTING -> "Connecting..."
-            ConnectionState.CONNECTED -> "Rokid glasses connected"
-            ConnectionState.ERROR -> "Error: "
+            ConnectionState.DISCONNECTED -> "眼镜未连接"
+            ConnectionState.AUTHENTICATING -> "正在授权..."
+            ConnectionState.CONNECTING -> "正在连接眼镜..."
+            ConnectionState.CONNECTED -> "眼镜已连接: ${getDeviceName()}"
+            ConnectionState.ERROR -> "错误: $errorMessage"
         }
     }
 }

@@ -2,6 +2,7 @@ package com.visionlink.android.ui
 
 import android.Manifest
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.os.Build
@@ -16,6 +17,9 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
 import com.visionlink.android.ai.AIInferenceManager
+import com.visionlink.android.ai.ModelApiConfig
+import com.visionlink.android.ai.ModelApiConfigManager
+import com.visionlink.android.ai.ModelApiConfigDialog
 import com.visionlink.android.ai.HandGuideManager
 import com.visionlink.android.camera.CameraManager
 import com.visionlink.android.databinding.ActivityMainBinding
@@ -25,6 +29,9 @@ import com.visionlink.android.audio.TTSManager
 import com.visionlink.android.audio.VoiceCommandManager
 import com.visionlink.android.bluetooth.BleRingManager
 import com.visionlink.android.utils.AICoreChecker
+import com.visionlink.android.utils.AppUpdateChecker
+import com.visionlink.android.utils.CrashReporter
+import com.visionlink.android.utils.UpdateDialog
 import com.visionlink.android.voiceprint.VoicePrintManager
 import com.visionlink.android.voiceprint.VoicePrintDialog
 import kotlinx.coroutines.CoroutineScope
@@ -43,7 +50,13 @@ class MainActivity : AppCompatActivity() {
     companion object {
         private const val TAG = "MainActivity"
         private const val REQUEST_PERMISSIONS = 1001
+        private const val REQUEST_CAMERA_FOR_CAPTURE = 1003
     }
+
+    /** 标记：用户点击拍照时相机权限未授予，授权后自动重试 */
+    private var pendingCaptureAfterPermission = false
+    /** 眼镜授权超时任务，收到 onActivityResult 时取消 */
+    private var glassesAuthTimeoutJob: Job? = null
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var aiManager: AIInferenceManager
@@ -54,6 +67,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var glassesManager: CXRGlassesManager
     private var isVoiceEnabled = false
     private lateinit var voicePrintManager: VoicePrintManager
+    private lateinit var modelApiConfigManager: ModelApiConfigManager
     private var currentUserId: String? = null  // 当前识别到的用户
 
     private var currentMode = 1
@@ -73,7 +87,7 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        Log.d(TAG, "VisionLink Android v4.2 started")
+        Log.d(TAG, "VisionLink Android v5.3.0 started")
         Log.d(TAG, "Device: ${Build.MANUFACTURER} ${Build.MODEL} (Android ${Build.VERSION.RELEASE})")
 
         // Enable edge-to-edge, handle system bar insets
@@ -87,6 +101,9 @@ class MainActivity : AppCompatActivity() {
         setupUI()
         observeAIState()
         checkPermissions()
+
+        // 启动后检查更新
+        checkForAppUpdate()
     }
 
     private fun initManagers() {
@@ -105,6 +122,13 @@ class MainActivity : AppCompatActivity() {
         ringManager = BleRingManager(this) { event -> handleRingEvent(event) }
         voicePrintManager = VoicePrintManager(this)
         voicePrintManager.initialize()
+        modelApiConfigManager = ModelApiConfigManager(this)
+
+        // 恢复上次选中的自定义 API 配置
+        modelApiConfigManager.getActive()?.let { config ->
+            aiManager.setCustomConfig(config)
+            Log.i(TAG, "Restored custom API: ${config.name}")
+        }
 
         // 声纹门控：受保护命令需先验证身份
         voiceManager.voicePrintGate = { command, execute ->
@@ -114,14 +138,14 @@ class MainActivity : AppCompatActivity() {
                 if (targetUser.isNullOrEmpty()) {
                     // 无已注册用户，直接执行
                     execute()
-                    return@voicePrintGate
-                }
-                speakSafely("请先验证身份")
-                voicePrintManager.startVerification(targetUser) { result ->
-                    if (result.isMatch) {
-                        execute()
-                    } else {
-                        speakSafely("身份验证失败")
+                } else {
+                    speakSafely("请先验证身份")
+                    voicePrintManager.startVerification(targetUser) { result ->
+                        if (result.isMatch) {
+                            execute()
+                        } else {
+                            speakSafely("身份验证失败")
+                        }
                     }
                 }
             } else {
@@ -149,6 +173,7 @@ class MainActivity : AppCompatActivity() {
         binding.btnCapture.setOnClickListener { captureAndAnalyze() }
         binding.btnCheckAICore?.setOnClickListener { runAICoreDiagnostic() }
         binding.btnSettings?.setOnClickListener { openSettings() }
+        binding.btnGlasses?.setOnClickListener { connectGlasses() }
         binding.btnTestApi.setOnClickListener { testApi() }
         binding.btnTestLm.setOnClickListener { testLmStudio() }
         binding.btnTestEdge.setOnClickListener { testEdge() }
@@ -174,6 +199,7 @@ class MainActivity : AppCompatActivity() {
                     AIInferenceManager.InferenceEngine.CLOUD     -> "Cloud (API)"
                     AIInferenceManager.InferenceEngine.STEPFUN  -> "StepFun API (阶跃星辰)"
                     AIInferenceManager.InferenceEngine.LM_STUDIO -> "LM Studio (Local)"
+                    AIInferenceManager.InferenceEngine.CUSTOM   -> aiManager.getCustomConfig()?.let { "${it.name} (Custom)" } ?: "Custom API"
                     AIInferenceManager.InferenceEngine.NONE      -> "Not selected"
                 }
                 binding.tvAiStatus.text = "Engine: $engineText"
@@ -278,9 +304,10 @@ class MainActivity : AppCompatActivity() {
                     if (isDestroyed || !isContinuousMode) break
                     binding.tvResult.text = result
                     speakSafely(result)
-                } catch (e: Exception) {
-                    Log.e(TAG, "Continuous detection error: ${e.message}", e)
-                    ttsManager.speak("检测出错，正在重试")
+            } catch (e: Exception) {
+                Log.e(TAG, "Continuous detection error: ${e.message}", e)
+                CrashReporter.reportError("ContinuousDetection", e.message ?: "unknown", e)
+                ttsManager.speak("检测出错，正在重试")
                 }
                 delay(3000) // 每轮间隔，兼顾播报时长与 API 频率
             }
@@ -356,8 +383,9 @@ class MainActivity : AppCompatActivity() {
                     if (isEnglish) "Pointing guide on. Point with your index finger. Say lock to lock a target."
                     else "指向引导已开启。请将手抬到胸前，用食指指向想去的方向。说锁定，可锁定目标开始引导"
                 )
-            } catch (e: Exception) {
-                Log.e(TAG, "Guide mode start failed: ${e.message}", e)
+        } catch (e: Exception) {
+            Log.e(TAG, "Guide mode start failed: ${e.message}", e)
+            CrashReporter.reportError("GuideMode", "Guide mode start failed: ${e.message}", e)
                 binding.tvAiStatus.text = "Error: ${e.message}"
             } finally {
                 isGuideStarting = false
@@ -395,8 +423,9 @@ class MainActivity : AppCompatActivity() {
                     binding.btnInitAI.text = "Retry Init"
                     speakSafely("AI initialization failed")
                 }
-            } catch (e: Exception) {
-                Log.e(TAG, "Init exception: ${e.message}", e)
+        } catch (e: Exception) {
+            Log.e(TAG, "Init exception: ${e.message}", e)
+            CrashReporter.reportError("AIInit", "AI initialization exception: ${e.message}", e)
                 ttsManager.speak("初始化失败")
                 binding.btnInitAI.isEnabled = true
                 binding.btnInitAI.text = "Retry Init"
@@ -530,8 +559,6 @@ class MainActivity : AppCompatActivity() {
                 if (!isDestroyed) {
                     ttsManager.speak("下载失败")
                     binding.btnDownloadModel.isEnabled = true
-                if (!isDestroyed) {
-                    binding.btnDownloadModel.isEnabled = true
                     binding.btnDownloadModel.text = if (isEnglish) "Download Failed" else "\u4e0b\u8f7d\u5931\u6548"
                     speakSafely(if (isEnglish) "Model download failed" else "\u6a21\u578b\u4e0b\u8f7d\u5931\u6548")
                 }
@@ -543,6 +570,14 @@ class MainActivity : AppCompatActivity() {
         if (!aiManager.isInitialized()) {
             Toast.makeText(this, if (isEnglish) "Please initialize AI first" else "请先初始化AI", Toast.LENGTH_SHORT).show()
             speakSafely(if (isEnglish) "Please initialize AI first" else "请先初始化AI")
+            return
+        }
+        // 检查相机权限
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+            Log.w(TAG, "Camera permission not granted, requesting...")
+            speakSafely(if (isEnglish) "Camera permission needed" else "需要相机权限")
+            pendingCaptureAfterPermission = true
+            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CAMERA), REQUEST_CAMERA_FOR_CAPTURE)
             return
         }
         if (!cameraManager.isCameraStarted()) {
@@ -594,7 +629,8 @@ class MainActivity : AppCompatActivity() {
                 speakSafely(result)
             } catch (e: Exception) {
                 Log.e("VisionLink", "Capture/analysis error: ${e.message}", e)
-            ttsManager.speak("分析失败")
+                CrashReporter.reportError("CaptureAnalyze", "Capture/analysis error: ${e.message}", e)
+                ttsManager.speak("分析失败")
                 binding.tvAiStatus.text = "Error: ${e.message}"
             }
         }
@@ -670,6 +706,8 @@ class MainActivity : AppCompatActivity() {
             getString(com.visionlink.android.R.string.settings_voice_enable) + if (isVoiceEnabled) " ✓" else "",
             if (ringManager.isConnected()) getString(com.visionlink.android.R.string.settings_ring_disconnect)
                else getString(com.visionlink.android.R.string.settings_ring_scan),
+            if (isEnglish) "Connect Glasses" else "连接眼镜",
+            if (isEnglish) "Model API Settings" else "模型 API 设置",
             getString(com.visionlink.android.R.string.settings_close)
         )
 
@@ -680,9 +718,25 @@ class MainActivity : AppCompatActivity() {
                     0 -> showLanguageDialog(prefs)
                     1 -> toggleVoiceCommand(prefs)
                     2 -> toggleRingConnection()
+                    3 -> connectGlasses()
+                    4 -> openModelApiSettings()
                 }
             }
             .show()
+    }
+
+    /**
+     * 打开模型 API 配置对话框
+     */
+    private fun openModelApiSettings() {
+        val dialog = ModelApiConfigDialog(this, modelApiConfigManager) { config ->
+            aiManager.setCustomConfig(config)
+            binding.tvAiStatus.text = "Engine: ${config.name} (Custom API)"
+            binding.tvAiStatus.visibility = android.view.View.VISIBLE
+            speakSafely("已切换到模型 ${config.name}")
+            Log.i(TAG, "Switched to custom API: ${config.name}")
+        }
+        dialog.show()
     }
 
     private fun showLanguageDialog(prefs: android.content.SharedPreferences) {
@@ -907,11 +961,11 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateModeUI() {
         binding.tvMode.text = when (currentMode) {
-            1 -> "Obstacle Avoidance"
-            2 -> "Text Reading"
-            3 -> "Scene Description"
-            4 -> "Pointing Guide"
-            else -> "Unknown"
+            1 -> if (isEnglish) "Obstacle Avoidance" else "障碍物检测"
+            2 -> if (isEnglish) "Text Reading" else "文字识别"
+            3 -> if (isEnglish) "Scene Description" else "场景描述"
+            4 -> if (isEnglish) "Pointing Guide" else "指向引导"
+            else -> if (isEnglish) "Unknown" else "未知"
         }
     }
 
@@ -962,6 +1016,7 @@ class MainActivity : AppCompatActivity() {
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Camera failed: ${e.message}", e)
+                CrashReporter.reportError("Camera", "Camera failed: ${e.message}", e)
                 if (retry < 3 && !isDestroyed) {
                     delay(1000)
                     startCameraWithRetry(retry + 1)
@@ -974,9 +1029,54 @@ class MainActivity : AppCompatActivity() {
 
     override fun onRequestPermissionsResult(code: Int, perms: Array<String>, results: IntArray) {
         super.onRequestPermissionsResult(code, perms, results)
-        if (code == REQUEST_PERMISSIONS) {
-            if (results.all { it == PackageManager.PERMISSION_GRANTED }) startCameraWithRetry()
-            else Toast.makeText(this, getString(com.visionlink.android.R.string.perm_camera_rationale), Toast.LENGTH_LONG).show()
+        when (code) {
+            REQUEST_PERMISSIONS -> {
+                if (results.all { it == PackageManager.PERMISSION_GRANTED }) startCameraWithRetry()
+                else Toast.makeText(this, getString(com.visionlink.android.R.string.perm_camera_rationale), Toast.LENGTH_LONG).show()
+            }
+            REQUEST_CAMERA_FOR_CAPTURE -> {
+                if (results.isNotEmpty() && results[0] == PackageManager.PERMISSION_GRANTED) {
+                    Log.d(TAG, "Camera permission granted for capture")
+                    if (pendingCaptureAfterPermission) {
+                        pendingCaptureAfterPermission = false
+                        // 权限刚授予，先启动相机再拍照
+                        scope.launch {
+                            try {
+                                cameraManager.startCamera()
+                                delay(1500)
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Camera start after permission: ${e.message}")
+                            }
+                            if (!isDestroyed && !isFinishing) captureAndAnalyze()
+                        }
+                    }
+                } else {
+                    pendingCaptureAfterPermission = false
+                    Toast.makeText(this, if (isEnglish) "Camera permission denied" else "相机权限被拒绝", Toast.LENGTH_LONG).show()
+                    speakSafely(if (isEnglish) "Camera permission denied" else "相机权限被拒绝")
+                }
+            }
+        }
+    }
+
+    /**
+     * 检查应用更新
+     * 通过 GitHub Releases API 检查是否有新版本
+     */
+    private fun checkForAppUpdate() {
+        scope.launch {
+            delay(2000) // 延迟 2 秒，避免与启动流程冲突
+            if (isDestroyed || isFinishing) return@launch
+
+            val checker = AppUpdateChecker(this@MainActivity)
+            val updateInfo = checker.checkForUpdate()
+
+            if (updateInfo != null) {
+                Log.i(TAG, "Update available: v${updateInfo.versionName}")
+                UpdateDialog(updateInfo).show(supportFragmentManager, UpdateDialog.TAG_FRAGMENT)
+            } else {
+                Log.d(TAG, "App is up to date")
+            }
         }
     }
 
@@ -984,11 +1084,20 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         ttsManager.switchLanguage(isEnglish)
         voiceManager.setEnglish(isEnglish)
-        if (::cameraManager.isInitialized && !isDestroyed) {
-            Log.d(TAG, "onResume: restarting camera")
-            startCameraWithRetry()
+
+        // 如果眼镜正在授权中，跳过相机重启和眼镜连接检查，避免干扰授权流程
+        val isGlassesAuthenticating = glassesManager.connectionState ==
+            com.visionlink.android.glasses.CXRGlassesManager.ConnectionState.AUTHENTICATING
+
+        if (!isGlassesAuthenticating) {
+            if (::cameraManager.isInitialized && !isDestroyed) {
+                Log.d(TAG, "onResume: restarting camera")
+                startCameraWithRetry()
+            }
+            checkGlassesConnection()
+        } else {
+            Log.d(TAG, "onResume: glasses authenticating, skipping camera/glasses check")
         }
-        checkGlassesConnection()
         
         // 自动声纹识别（如果已注册用户）
         if (voicePrintManager.getEnrolledCount() > 0 && voicePrintManager.isReady()) {
@@ -1008,10 +1117,79 @@ class MainActivity : AppCompatActivity() {
     private fun checkGlassesConnection() {
         glassesManager.connect { connected ->
             runOnUiThread {
-                binding.tvGlassesStatus.text = if (connected) {
-                    getString(com.visionlink.android.R.string.glasses_connected)
+                if (connected) {
+                    binding.tvGlassesStatus.text = if (isEnglish) {
+                        "Glasses: ${glassesManager.getDeviceName()}"
+                    } else {
+                        "眼镜: ${glassesManager.getDeviceName()}"
+                    }
+                    binding.tvGlassesStatus.setTextColor(0xFF00FF00.toInt())
+                    speakSafely(if (isEnglish) "Glasses connected" else "眼镜已连接")
                 } else {
-                    getString(com.visionlink.android.R.string.glasses_disconnected)
+                    binding.tvGlassesStatus.text = getString(com.visionlink.android.R.string.glasses_disconnected)
+                    binding.tvGlassesStatus.setTextColor(0xFFFF0000.toInt())
+                }
+            }
+        }
+    }
+
+    /**
+     * 连接 Rokid 眼镜（通过 Rokid AI App 授权）
+     */
+    private fun connectGlasses() {
+        if (glassesManager.isConnected) {
+            Toast.makeText(this, if (isEnglish) "Glasses already connected" else "眼镜已连接", Toast.LENGTH_SHORT).show()
+            return
+        }
+        binding.tvGlassesStatus.text = if (isEnglish) "Authenticating..." else "正在授权..."
+        speakSafely(if (isEnglish) "Connecting glasses" else "正在连接眼镜")
+        val started = glassesManager.requestAuthAndConnect(this)
+        if (!started) {
+            binding.tvGlassesStatus.text = if (isEnglish) "Rokid AI App not installed" else "请先安装 Rokid AI App"
+            speakSafely(if (isEnglish) "Please install Rokid AI App first" else "请先安装 Rokid AI App")
+        } else {
+            // 授权超时保护：如果 120 秒内未收到 onActivityResult，重置状态
+            glassesAuthTimeoutJob?.cancel()
+            glassesAuthTimeoutJob = scope.launch {
+                delay(120_000)
+                if (!isDestroyed && !isFinishing &&
+                    glassesManager.connectionState == com.visionlink.android.glasses.CXRGlassesManager.ConnectionState.AUTHENTICATING) {
+                    Log.w(TAG, "Authorization timed out after 120s")
+                    glassesManager.resetAuthState()
+                    runOnUiThread {
+                        binding.tvGlassesStatus.text = if (isEnglish) "Auth timeout, retry" else "授权超时，请重试"
+                        binding.tvGlassesStatus.setTextColor(0xFFFF0000.toInt())
+                        speakSafely(if (isEnglish) "Authorization timed out" else "授权超时")
+                    }
+                    CrashReporter.reportError("GlassesAuth", "Glasses authorization timed out after 120s")
+                }
+            }
+        }
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == com.visionlink.android.glasses.RokidCxrHelper.REQUEST_AUTH) {
+            Log.i(TAG, "onActivityResult: REQUEST_AUTH, resultCode=$resultCode")
+            // 收到授权结果，取消超时保护
+            glassesAuthTimeoutJob?.cancel()
+            glassesAuthTimeoutJob = null
+            glassesManager.handleAuthResult(resultCode, data) { connected ->
+                runOnUiThread {
+                    if (connected) {
+                        binding.tvGlassesStatus.text = if (isEnglish) {
+                            "Glasses: ${glassesManager.getDeviceName()}"
+                        } else {
+                            "眼镜: ${glassesManager.getDeviceName()}"
+                        }
+                        binding.tvGlassesStatus.setTextColor(0xFF00FF00.toInt())
+                        speakSafely(if (isEnglish) "Glasses connected" else "眼镜已连接")
+                    } else {
+                        val err = glassesManager.errorMessage
+                        binding.tvGlassesStatus.text = if (err.isNotEmpty()) err else getString(com.visionlink.android.R.string.glasses_disconnected)
+                        binding.tvGlassesStatus.setTextColor(0xFFFF0000.toInt())
+                        speakSafely(if (isEnglish) "Glasses connection failed" else "眼镜连接失败")
+                    }
                 }
             }
         }

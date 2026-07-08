@@ -103,3 +103,14 @@ sdk/rokid-sdk-page.html
 sdk/rokid-sdk-record.json
 sdk/rokid-cxrm/
 *.zip
+
+# ============ 临时发布脚本 ============
+/upload_*.py
+/upload_*.ps1
+/upload_result*.txt
+/release_v*.py
+/release_v*_payload.json
+/check_issues.py
+/check_releases.py
+/create_release.py
+/update_releases.py

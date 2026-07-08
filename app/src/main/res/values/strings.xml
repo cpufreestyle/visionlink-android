@@ -84,4 +84,10 @@
     <string name="ai_model_ready">AI model ready. Tap Capture to analyze.</string>
     <string name="error_prefix">Error:</string>
     <string name="mode_unknown">Unknown</string>
+    <!-- Glasses -->
+    <string name="glasses_pair">Pair Glasses</string>
+    <string name="glasses_scanning">Scanning for glasses...</string>
+    <string name="glasses_connecting">Connecting to glasses...</string>
+    <string name="glasses_connect_success">Glasses connected successfully</string>
+    <string name="glasses_connect_failed">Glasses connection failed</string>
     </resources>

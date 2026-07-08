@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- Cache 目录 — 用于 APK 更新文件 -->
+    <cache-path name="cache" path="." />
+    <!-- 外部缓存目录 -->
+    <external-cache-path name="external_cache" path="." />
+    <!-- Files 目录 -->
+    <files-path name="files" path="." />
+    <!-- 外部 Files 目录 -->
+    <external-files-path name="external_files" path="." />
+</paths>

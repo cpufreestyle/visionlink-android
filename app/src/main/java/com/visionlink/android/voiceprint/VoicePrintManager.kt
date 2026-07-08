@@ -18,6 +18,7 @@ import org.json.JSONObject
 import java.io.File
 import java.nio.FloatBuffer
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.math.pow
 
 /**
  * 声纹识别管理器 (端侧离线)
@@ -131,8 +132,8 @@ class VoicePrintManager(private val context: Context) {
         }
 
         // Mel 转换辅助函数
-        private fun hzToMel(hz: Float): Float = 2595f * Math.log10(1 + hz / 700f).toFloat()
-        private fun melToHz(mel: Float): Float = 700f * (Math.pow(10f, mel / 2595f).toDouble().toFloat() - 1)
+        private fun hzToMel(hz: Float): Float = 2595f * kotlin.math.log10(1 + hz / 700f)
+        private fun melToHz(mel: Float): Float = 700f * (10f.pow(mel / 2595f) - 1f)
 
         /**
          * 静态创建 Mel 滤波器组 (供预计算使用)
@@ -269,12 +270,12 @@ class VoicePrintManager(private val context: Context) {
             val modelFile = copyAssetToCache(MODEL_FILE, "$MODEL_DIR/$MODEL_FILE")
 
             // 强类型 ONNX Runtime API
-            val env = ai.onnxruntime.OrtEnvironment.getDefault()
+            val env = ai.onnxruntime.OrtEnvironment.getEnvironment()
             val opts = ai.onnxruntime.OrtSession.SessionOptions().apply {
                 setIntraOpNumThreads(2)
             }
 
-            ortSession = ai.onnxruntime.OrtSession(env, modelFile.absolutePath, opts)
+            ortSession = env.createSession(modelFile.absolutePath, opts)
             isModelLoaded = true
 
             // 加载已注册用户
@@ -769,7 +770,7 @@ class VoicePrintManager(private val context: Context) {
                 for (k in 0..nFft / 2) {
                     sum += powerSpec[i][k] * melFilters[m][k]
                 }
-                fbank[i][m] = if (sum > 1e-10f) Math.log10(sum).toFloat() else -10f
+                fbank[i][m] = if (sum > 1e-10f) kotlin.math.log10(sum) else -10f
             }
         }
 
@@ -784,7 +785,7 @@ class VoicePrintManager(private val context: Context) {
                 val d = fbank[i][m] - mean
                 std += d * d
             }
-            std = Math.sqrt(std / numFrames).toFloat()
+            std = kotlin.math.sqrt(std / numFrames)
             if (std < 1e-6f) std = 1f
 
             for (i in 0 until numFrames) {
@@ -932,12 +933,12 @@ class VoicePrintManager(private val context: Context) {
 
             // 2. ONNX 推理 (强类型 API)
             val session = ortSession!!
-            val env = ai.onnxruntime.OrtEnvironment.getDefault()
+            val env = ai.onnxruntime.OrtEnvironment.getEnvironment()
 
             // 输入 shape: (1, T, 80)
             val shape = longArrayOf(1, fbank.size.toLong(), N_MELS.toLong())
             val input = ai.onnxruntime.OnnxTensor.createTensor(
-                env, FloatBuffer.wrap(fbank.flatten()), shape
+                env, FloatBuffer.wrap(fbank.flatMap { it.toList() }.toFloatArray()), shape
             )
 
             val output = session.run(mapOf(session.inputNames.iterator().next() to input))

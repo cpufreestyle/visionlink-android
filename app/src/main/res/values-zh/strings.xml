@@ -81,4 +81,10 @@
     <string name="ai_model_ready">AI模型就绪。点击拍照分析。</string>
     <string name="error_prefix">错误:</string>
     <string name="mode_unknown">未知</string>
+    <!-- 眼镜 -->
+    <string name="glasses_pair">配对眼镜</string>
+    <string name="glasses_scanning">正在扫描眼镜...</string>
+    <string name="glasses_connecting">正在连接眼镜...</string>
+    <string name="glasses_connect_success">眼镜连接成功</string>
+    <string name="glasses_connect_failed">眼镜连接失败</string>
     </resources>
