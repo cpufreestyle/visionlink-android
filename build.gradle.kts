@@ -14,7 +14,7 @@ val localProps = java.util.Properties().apply {
 extra["STEPFUN_API_KEY"] = localProps.getProperty("stepfun.api.key", "")
 extra["STEPFUN_API_KEY_TEST"] = localProps.getProperty("stepfun.api.key.test", "")
 
-val lmStudioUrl: String = localProps.getProperty("lmstudio.url", "http://172.16.20.242:1234/v1/chat/completions")
+val lmStudioUrl: String = localProps.getProperty("lmstudio.url", "http://127.0.0.1:1234/v1/chat/completions")
 extra["LM_STUDIO_URL"] = lmStudioUrl
 
 tasks.register("clean") {

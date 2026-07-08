@@ -500,7 +500,7 @@ class AIInferenceManager(private val context: Context) {
 
     /**
      * Connect to LM Studio running on PC (OpenAI-compatible API)
-     * User's LM Studio: 172.16.20.242:1234
+     * Local OpenAI-compatible proxy. Use adb reverse for USB-connected devices.
      */
     private var lmStudioUrl: String = BuildConfig.LM_STUDIO_URL
     
