@@ -33,6 +33,26 @@
 -keep,allowobfuscation class org.tensorflow.lite.InterpreterFactory
 -keep,allowobfuscation class org.tensorflow.lite.InterpreterApi
 
+# ============ ML Kit Text Recognition 保护 ============
+
+-keep class com.google.mlkit.** { *; }
+-keep class com.google.android.gms.internal.mlkit_vision_text.** { *; }
+-keep class com.google.android.gms.vision.text.** { *; }
+-dontwarn com.google.mlkit.**
+
+# ============ MediaPipe 保护 ============
+
+-keep class com.google.mediapipe.** { *; }
+-keep class com.google.mediapipe.framework.** { *; }
+-keep class com.google.mediapipe.tasks.** { *; }
+-keep class com.google.mediapipe.tasks.vision.** { *; }
+-keep class com.google.mediapipe.tasks.vision.objectdetector.** { *; }
+-keep class com.google.mediapipe.tasks.vision.handlandmarker.** { *; }
+-keep class com.google.mediapipe.tasks.vision.core.** { *; }
+-keep class com.google.mediapipe.tasks.components.** { *; }
+-keep class com.google.mediapipe.tasks.core.** { *; }
+-dontwarn com.google.mediapipe.**
+
 # ============ CameraX 保护 ============
 
 -keep class androidx.camera.** { *; }
@@ -104,15 +124,13 @@
 -keep class com.visionlink.android.utils.CrashReporter { *; }
 -keep class com.visionlink.android.utils.CrashReporter$Companion { *; }
 
-# 移除日志 (Release 构建)
+# 移除日志 (Release 构建) — 保留 e 和 w 用于错误诊断
 
 -assumenosideeffects class android.util.Log {
     public static boolean isLoggable(java.lang.String, int);
     public static int v(...);
-    public static int i(...);
-    public static int w(...);
     public static int d(...);
-    public static int e(...);
+    public static int i(...);
 }
 
 # ============ 优化 ============

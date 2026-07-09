@@ -15,7 +15,7 @@
         android:layout_width="0dp"
         android:layout_height="0dp"
         android:contentDescription="摄像头预览画面"
-        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintBottom_toTopOf="@+id/bottomControls"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
@@ -26,7 +26,7 @@
         android:layout_width="0dp"
         android:layout_height="0dp"
         android:background="@drawable/roi_frame"
-        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintBottom_toTopOf="@+id/bottomControls"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
@@ -113,130 +113,6 @@
 
     </ScrollView>
 
-    <!-- Bottom Control Bar -->
-    <HorizontalScrollView
-        android:id="@+id/bottomControls"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:background="#80000000"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent">
-
-        <LinearLayout
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:gravity="center"
-            android:orientation="horizontal"
-            android:padding="8dp">
-
-            <Button android:id="@+id/btnVoicePrint" style="@style/Widget.Material3.Button"
-                android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:layout_margin="2dp" android:backgroundTint="#00BCD4"
-                android:text="声纹" android:textColor="#FFFFFF" android:textSize="12sp"
-                android:contentDescription="声纹用户管理" />
-
-            <Button android:id="@+id/btnGlasses" style="@style/Widget.Material3.Button"
-                android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:layout_margin="2dp" android:backgroundTint="#795548"
-                android:text="眼镜" android:textColor="#FFFFFF" android:textSize="12sp"
-                android:contentDescription="配对Rokid眼镜" />
-
-            <Button android:id="@+id/btnMode1" style="@style/Widget.Material3.Button"
-                android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:layout_margin="2dp" android:backgroundTint="#FF0000"
-                android:text="@string/mode_obstacle" android:textColor="#FFFFFF" android:textSize="12sp"
-                android:contentDescription="障碍物避障模式" />
-
-            <Button android:id="@+id/btnMode2" style="@style/Widget.Material3.Button"
-                android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:layout_margin="2dp" android:backgroundTint="#FFAA00"
-                android:text="@string/mode_text" android:textColor="#FFFFFF" android:textSize="12sp"
-                android:contentDescription="读文字模式" />
-
-            <Button android:id="@+id/btnMode3" style="@style/Widget.Material3.Button"
-                android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:layout_margin="2dp" android:backgroundTint="#0000FF"
-                android:text="@string/mode_scene" android:textColor="#FFFFFF" android:textSize="12sp"
-                android:contentDescription="场景描述模式" />
-
-            <Button android:id="@+id/btnMode4" style="@style/Widget.Material3.Button"
-                android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:layout_margin="2dp" android:backgroundTint="#00BCD4"
-                android:text="@string/mode_guide" android:textColor="#FFFFFF" android:textSize="12sp"
-                android:contentDescription="指向引导模式" />
-
-            <Button android:id="@+id/btnDownloadModel" style="@style/Widget.Material3.Button"
-                android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:layout_margin="2dp" android:backgroundTint="#9C27B0"
-                android:text="@string/download_model" android:textColor="#FFFFFF" android:textSize="12sp"
-                android:contentDescription="下载AI模型" />
-
-            <Button android:id="@+id/btnInitAI" style="@style/Widget.Material3.Button"
-                android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:layout_margin="2dp" android:backgroundTint="#FF9800"
-                android:text="@string/init_ai" android:textColor="#FFFFFF" android:textSize="12sp"
-                android:contentDescription="初始化AI引擎" />
-
-            <Button android:id="@+id/btnCheckAICore" style="@style/Widget.Material3.Button"
-                android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:layout_margin="2dp" android:backgroundTint="#9C27B0"
-                android:text="@string/check_aicore" android:textColor="#FFFFFF" android:textSize="12sp"
-                android:contentDescription="检查AI核心支持" />
-
-            <Button android:id="@+id/btnContinuous" style="@style/Widget.Material3.Button"
-                android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:layout_margin="2dp" android:backgroundTint="#00AA00"
-                android:text="@string/start_continuous" android:textColor="#FFFFFF" android:textSize="12sp"
-                android:contentDescription="开始或停止连续检测" />
-
-            <Button android:id="@+id/btnCapture" style="@style/Widget.Material3.Button"
-                android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:layout_margin="2dp" android:backgroundTint="#2196F3"
-                android:text="@string/capture_single" android:textColor="#FFFFFF" android:textSize="12sp"
-                android:contentDescription="拍照分析" />
-
-            <Button android:id="@+id/btnSettings" style="@style/Widget.Material3.Button"
-                android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:layout_margin="2dp" android:backgroundTint="#607D8B"
-                android:text="@string/settings" android:textColor="#FFFFFF" android:textSize="12sp"
-                android:contentDescription="设置" />
-
-            <Button android:id="@+id/btnTestApi" style="@style/Widget.Material3.Button"
-                android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:layout_margin="2dp" android:backgroundTint="#880088"
-                android:text="Test API" android:textColor="#FFFFFF" android:textSize="12sp"
-                android:contentDescription="测试Moonshot API连接" />
-
-            <Button android:id="@+id/btnTestLm" style="@style/Widget.Material3.Button"
-                android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:layout_margin="2dp" android:backgroundTint="#006600"
-                android:text="Test LM" android:textColor="#FFFFFF" android:textSize="12sp"
-                android:contentDescription="测试LM Studio连接" />
-
-
-            <Button android:id="@+id/btnTestEdge" style="@style/Widget.Material3.Button"
-                android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:layout_margin="2dp" android:backgroundTint="#E65100"
-                android:text="Test EDGE" android:textColor="#FFFFFF" android:textSize="12sp"
-                android:contentDescription="测试端侧推理" />
-
-            <Button android:id="@+id/btnSwitchEngine" style="@style/Widget.Material3.Button"
-                android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:layout_margin="2dp" android:backgroundTint="#004D40"
-                android:text="引擎: API" android:textColor="#FFFFFF" android:textSize="12sp"
-                android:contentDescription="切换AI引擎" />
-
-            <Button android:id="@+id/btnExit" style="@style/Widget.Material3.Button"
-                android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:layout_margin="2dp" android:backgroundTint="#666666"
-                android:text="@string/exit" android:textColor="#FFFFFF" android:textSize="12sp"
-                android:contentDescription="退出应用" />
-
-        </LinearLayout>
-
-    </HorizontalScrollView>
-
     <!-- Glasses Status -->
     <TextView
         android:id="@+id/tvGlassesStatus"
@@ -250,5 +126,94 @@
         android:textSize="12sp"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/topStatusBar" />
+
+    <!-- Bottom Control Bar — 两行网格，无需滚动 -->
+    <LinearLayout
+        android:id="@+id/bottomControls"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:background="#80000000"
+        android:orientation="vertical"
+        android:padding="4dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent">
+
+        <!-- 第一行：4个模式按钮 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:orientation="horizontal"
+            android:layout_marginBottom="2dp">
+
+            <Button android:id="@+id/btnMode1" style="@style/Widget.Material3.Button"
+                android:layout_width="0dp" android:layout_height="48dp"
+                android:layout_weight="1" android:layout_margin="2dp"
+                android:backgroundTint="#FF0000"
+                android:text="@string/mode_obstacle" android:textColor="#FFFFFF" android:textSize="13sp"
+                android:contentDescription="障碍物避障模式" />
+
+            <Button android:id="@+id/btnMode2" style="@style/Widget.Material3.Button"
+                android:layout_width="0dp" android:layout_height="48dp"
+                android:layout_weight="1" android:layout_margin="2dp"
+                android:backgroundTint="#FFAA00"
+                android:text="@string/mode_text" android:textColor="#FFFFFF" android:textSize="13sp"
+                android:contentDescription="读文字模式" />
+
+            <Button android:id="@+id/btnMode3" style="@style/Widget.Material3.Button"
+                android:layout_width="0dp" android:layout_height="48dp"
+                android:layout_weight="1" android:layout_margin="2dp"
+                android:backgroundTint="#0000FF"
+                android:text="@string/mode_scene" android:textColor="#FFFFFF" android:textSize="13sp"
+                android:contentDescription="场景描述模式" />
+
+            <Button android:id="@+id/btnMode4" style="@style/Widget.Material3.Button"
+                android:layout_width="0dp" android:layout_height="48dp"
+                android:layout_weight="1" android:layout_margin="2dp"
+                android:backgroundTint="#00BCD4"
+                android:text="@string/mode_guide" android:textColor="#FFFFFF" android:textSize="13sp"
+                android:contentDescription="指向引导模式" />
+
+        </LinearLayout>
+
+        <!-- 第二行：拍照、连续、引擎、更多 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:orientation="horizontal">
+
+            <Button android:id="@+id/btnCapture" style="@style/Widget.Material3.Button"
+                android:layout_width="0dp" android:layout_height="48dp"
+                android:layout_weight="1" android:layout_margin="2dp"
+                android:backgroundTint="#2196F3"
+                android:text="@string/capture_single" android:textColor="#FFFFFF" android:textSize="13sp"
+                android:contentDescription="拍照分析" />
+
+            <Button android:id="@+id/btnContinuous" style="@style/Widget.Material3.Button"
+                android:layout_width="0dp" android:layout_height="48dp"
+                android:layout_weight="1" android:layout_margin="2dp"
+                android:backgroundTint="#00AA00"
+                android:text="@string/start_continuous" android:textColor="#FFFFFF" android:textSize="13sp"
+                android:contentDescription="开始或停止连续检测" />
+
+            <Button android:id="@+id/btnSwitchEngine" style="@style/Widget.Material3.Button"
+                android:layout_width="0dp" android:layout_height="48dp"
+                android:layout_weight="1" android:layout_margin="2dp"
+                android:backgroundTint="#004D40"
+                android:text="引擎: YOLO" android:textColor="#FFFFFF" android:textSize="13sp"
+                android:contentDescription="切换AI引擎" />
+
+            <Button android:id="@+id/btnMore" style="@style/Widget.Material3.Button"
+                android:layout_width="0dp" android:layout_height="48dp"
+                android:layout_weight="1" android:layout_margin="2dp"
+                android:backgroundTint="#607D8B"
+                android:text="更多" android:textColor="#FFFFFF" android:textSize="13sp"
+                android:contentDescription="更多功能" />
+
+        </LinearLayout>
+
+    </LinearLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

@@ -7,6 +7,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.content.res.Configuration
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
@@ -47,6 +48,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.collectLatest
+import java.io.File
+import java.io.FileOutputStream
 
 class MainActivity : AppCompatActivity() {
 
@@ -54,6 +57,7 @@ class MainActivity : AppCompatActivity() {
         private const val TAG = "MainActivity"
         private const val REQUEST_PERMISSIONS = 1001
         private const val REQUEST_CAMERA_FOR_CAPTURE = 1003
+        private const val REQUEST_MODEL_FILE = 1005
         private const val ACTION_DEBUG_COMMAND = "com.visionlink.android.DEBUG_COMMAND"
     }
 
@@ -81,6 +85,11 @@ class MainActivity : AppCompatActivity() {
     private var isContinuousMode = false
     private var continuousJob: Job? = null
 
+    /** 连续检测：上次播报的文本指纹，用于检测场景变化 */
+    private var lastContinuousFingerprint: String? = null
+    /** 连续检测：上次播报时间戳，用于控制重复播报间隔 */
+    private var lastContinuousAnnounceTs = 0L
+
     // 模式4: 指向引导（端侧实时手部+物体检测）
     private var guideManager: HandGuideManager? = null
     private var isGuideMode = false
@@ -98,7 +107,7 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        Log.d(TAG, "VisionLink Android v5.8.0 started")
+        Log.d(TAG, "VisionLink Android v5.9.3 started")
         Log.d(TAG, "Device: ${Build.MANUFACTURER} ${Build.MODEL} (Android ${Build.VERSION.RELEASE})")
 
         // Enable edge-to-edge, handle system bar insets
@@ -255,23 +264,10 @@ class MainActivity : AppCompatActivity() {
         binding.btnMode3.setOnClickListener { setMode(3) }
         binding.btnMode4.setOnClickListener { toggleGuideMode() }
 
-        binding.btnInitAI.setOnClickListener {
-            if (!aiManager.isInitialized()) initAI()
-            else Toast.makeText(this, if (isEnglish) "AI already initialized" else "AI\u5df2\u521d\u59cb\u5316", Toast.LENGTH_SHORT).show()
-        }
-
-        binding.btnDownloadModel.setOnClickListener { downloadModel() }
         binding.btnContinuous.setOnClickListener { toggleContinuousMode() }
         binding.btnCapture.setOnClickListener { captureAndAnalyze() }
-        binding.btnCheckAICore?.setOnClickListener { runAICoreDiagnostic() }
-        binding.btnSettings?.setOnClickListener { openSettings() }
-        binding.btnGlasses?.setOnClickListener { connectGlasses() }
-        binding.btnTestApi.setOnClickListener { testApi() }
-        binding.btnTestLm.setOnClickListener { testLmStudio() }
-        binding.btnTestEdge.setOnClickListener { testEdge() }
         binding.btnSwitchEngine.setOnClickListener { switchEngine() }
-        binding.btnVoicePrint.setOnClickListener { openVoicePrintDialog() }
-        binding.btnExit.setOnClickListener { finish() }
+        binding.btnMore.setOnClickListener { openMoreMenu() }
 
         updateModeUI()
         updateEngineButton()
@@ -279,6 +275,43 @@ class MainActivity : AppCompatActivity() {
         binding.tvAiStatus.visibility = android.view.View.VISIBLE
         binding.tvFps.text = "FPS: 0"
         binding.tvFps.visibility = android.view.View.VISIBLE
+    }
+
+    /**
+     * “更多”菜单：声纹、眼镜、初始化AI、下载模型、设置、测试等次要功能
+         */
+    private fun openMoreMenu() {
+        val items = arrayOf(
+            "声纹管理",
+            "连接眼镜",
+            "初始化 AI",
+            "选择模型文件",
+            "下载模型",
+            "设置",
+            "测试 API",
+            "测试 LM Studio",
+            "测试 EDGE",
+            "检查 AICore",
+            "退出"
+        )
+        AlertDialog.Builder(this)
+            .setTitle("更多功能")
+            .setItems(items) { _, which ->
+                when (which) {
+                    0 -> openVoicePrintDialog()
+                    1 -> connectGlasses()
+                    2 -> { if (!aiManager.isInitialized()) initAI() else Toast.makeText(this, "AI 已就绪", Toast.LENGTH_SHORT).show() }
+                    3 -> pickModelFile()
+                    4 -> downloadModel()
+                    5 -> openSettings()
+                    6 -> testApi()
+                    7 -> testLmStudio()
+                    8 -> testEdge()
+                    9 -> runAICoreDiagnostic()
+                    10 -> finish()
+                }
+            }
+            .show()
     }
 
     /**
@@ -379,8 +412,6 @@ class MainActivity : AppCompatActivity() {
 
                 if (state.isInitialized) {
                     binding.tvAiStatus.text = if (isEnglish) "$engineText ready" else "$engineText \u5c31\u7eea"
-                    binding.btnInitAI.text = "AI Ready"
-                    binding.btnInitAI.isEnabled = false
                     binding.tvResult.text = getString(com.visionlink.android.R.string.ai_model_ready)
                     if (state.engine != AIInferenceManager.InferenceEngine.YOLO) {
                         speakSafely("AI initialized with $engineText")
@@ -388,9 +419,6 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 if (state.initError != null) binding.tvAiStatus.text = "Error: ${state.initError}"
-                if (state.modelDownloaded && !state.isInitialized) {
-                    binding.btnInitAI.text = "Init AI (${state.modelSizeMb}MB)"
-                }
             }
         }
     }
@@ -462,7 +490,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun startContinuousDetection() {
         binding.tvStatus.text = getString(com.visionlink.android.R.string.status_continuous_active)
-        // 真实的连续检测循环：拍照 → 当前模式分析 → 播报 → 等待，串行执行防止请求堆积
+        lastContinuousFingerprint = null // 重置指纹，确保首次播报
+        // 真实的连续检测循环：拍照 → 当前模式分析 → 场景变化时播报 → 等待
         continuousJob?.cancel()
         continuousJob = scope.launch {
             while (isActive && isContinuousMode && !isDestroyed) {
@@ -474,14 +503,28 @@ class MainActivity : AppCompatActivity() {
                     }
                     val result = aiManager.analyzeImage(bitmap, currentMode)
                     if (isDestroyed || !isContinuousMode) break
+
+                    // 更新屏幕显示（每帧都更新）
                     binding.tvResult.text = result
-                    speakSafely(result)
+
+                    // 场景变化检测：结果不同时播报，或超过重复间隔时重播
+                    val now = System.currentTimeMillis()
+                    val fingerprint = result.take(30) // 取前30字符作为指纹，更灵敏地检测变化
+                    val sceneChanged = fingerprint != lastContinuousFingerprint
+                    val shouldRepeat = now - lastContinuousAnnounceTs > 8_000 // 8秒重播一次
+                    val minInterval = now - lastContinuousAnnounceTs > 1500 // 最少间隔1.5秒，防止刷屏
+
+                    if ((sceneChanged || shouldRepeat) && minInterval) {
+                        speakSafely(result)
+                        lastContinuousFingerprint = fingerprint
+                        lastContinuousAnnounceTs = now
+                    }
             } catch (e: Exception) {
                 Log.e(TAG, "Continuous detection error: ${e.message}", e)
                 CrashReporter.reportError("ContinuousDetection", e.message ?: "unknown", e)
                 ttsManager.speak("检测出错，正在重试")
                 }
-                delay(3000) // 每轮间隔，兼顾播报时长与 API 频率
+                delay(2000) // 检测间隔，YOLO 快速模式可短些
             }
         }
     }
@@ -578,8 +621,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun initAI() {
-        binding.btnInitAI.isEnabled = false
-        binding.btnInitAI.text = "Initializing..."
         binding.tvAiStatus.text = getString(com.visionlink.android.R.string.status_init_ai)
         binding.tvAiStatus.visibility = android.view.View.VISIBLE
 
@@ -588,19 +629,14 @@ class MainActivity : AppCompatActivity() {
                 aiManager.initialize()
                 if (aiManager.isInitialized()) {
                     binding.tvAiStatus.text = "${aiManager.getEngine().name} ready"
-                    binding.btnInitAI.text = "AI Ready"
                     speakSafely("AI initialized successfully")
                 } else {
-                    binding.btnInitAI.isEnabled = true
-                    binding.btnInitAI.text = "Retry Init"
                     speakSafely("AI initialization failed")
                 }
         } catch (e: Exception) {
             Log.e(TAG, "Init exception: ${e.message}", e)
             CrashReporter.reportError("AIInit", "AI initialization exception: ${e.message}", e)
                 ttsManager.speak("初始化失败")
-                binding.btnInitAI.isEnabled = true
-                binding.btnInitAI.text = "Retry Init"
                 binding.tvAiStatus.text = getString(com.visionlink.android.R.string.error_prefix) + e.message
             }
         }
@@ -609,7 +645,6 @@ class MainActivity : AppCompatActivity() {
     private fun testApi() {
         binding.tvAiStatus.text = getString(com.visionlink.android.R.string.api_test_waiting)
         binding.tvResult.text = "Testing API..."
-        binding.btnTestApi.isEnabled = false
 
         scope.launch {
             try {
@@ -617,7 +652,6 @@ class MainActivity : AppCompatActivity() {
                 val result = aiManager.testApiConnection()
                 
                 runOnUiThread {
-                    binding.btnTestApi.isEnabled = true
                     binding.tvResult.text = "API Test Result:\n$result"
                     
                     if (result.startsWith("Error") || result.startsWith("失败") || result.startsWith("错误")) {
@@ -629,7 +663,6 @@ class MainActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 Log.e(TAG, "API test error: ${e.message}", e)
                 runOnUiThread {
-                    binding.btnTestApi.isEnabled = true
                     binding.tvResult.text = "API Test FAILED:\n${e.message}"
                     Toast.makeText(this@MainActivity, "API Test FAILED: ${e.message}", Toast.LENGTH_LONG).show()
                 }
@@ -640,7 +673,6 @@ class MainActivity : AppCompatActivity() {
     private fun testLmStudio() {
         binding.tvAiStatus.text = "Testing LM Studio..."
         binding.tvResult.text = "Testing local AI proxy at 127.0.0.1:1234..."
-        binding.btnTestLm.isEnabled = false
 
         scope.launch {
             try {
@@ -651,7 +683,6 @@ class MainActivity : AppCompatActivity() {
                 val result = aiManager.testLmStudioConnection()
                 
                 runOnUiThread {
-                    binding.btnTestLm.isEnabled = true
                     binding.tvResult.text = "LM Studio Test Result:\n$result"
                     
                     if (result.startsWith("SUCCESS") || result.startsWith("OK")) {
@@ -664,7 +695,6 @@ class MainActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 Log.e(TAG, "LM Studio test error: ${e.message}", e)
                 runOnUiThread {
-                    binding.btnTestLm.isEnabled = true
                     binding.tvResult.text = "LM Studio Test FAILED:\n${e.message}"
                     Toast.makeText(this@MainActivity, "LM Studio Test FAILED: ${e.message}", Toast.LENGTH_LONG).show()
                 }
@@ -675,7 +705,6 @@ class MainActivity : AppCompatActivity() {
     private fun testEdge() {
         binding.tvAiStatus.text = "Testing EDGE (LiteRT-LM)..."
         binding.tvResult.text = "Checking local LiteRT-LM model..."
-        binding.btnTestEdge.isEnabled = false
 
         scope.launch {
             try {
@@ -685,7 +714,6 @@ class MainActivity : AppCompatActivity() {
                 val checkResult = aiManager.testEdgeConnection()
 
                 runOnUiThread {
-                    binding.btnTestEdge.isEnabled = true
                     binding.tvResult.text = "EDGE Test Result:\n$checkResult"
                     binding.tvAiStatus.text = "EDGE: ${if (checkResult.startsWith("✅")) "Ready" else "Model Needed"}"
                     Toast.makeText(this@MainActivity, "EDGE test completed", Toast.LENGTH_SHORT).show()
@@ -694,7 +722,6 @@ class MainActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 Log.e(TAG, "EDGE test error: ${e.message}", e)
                 runOnUiThread {
-                    binding.btnTestEdge.isEnabled = true
                     binding.tvResult.text = "EDGE Test FAILED:\n${e.message}"
                     binding.tvAiStatus.text = "EDGE: Error"
                     Toast.makeText(this@MainActivity, "EDGE FAILED: ${e.message}", Toast.LENGTH_LONG).show()
@@ -703,13 +730,120 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * 打开文件选择器，让用户手动选择 .litertlm 模型文件
+     * 选中后复制到应用内部存储，供 Gemma 4 引擎使用
+     */
+    private fun pickModelFile() {
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "*/*"
+            putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("application/octet-stream", "*/*"))
+        }
+        try {
+            startActivityForResult(intent, REQUEST_MODEL_FILE)
+            speakSafely("请选择 litertlm 模型文件")
+        } catch (e: Exception) {
+            Log.e(TAG, "文件选择器启动失败: ${e.message}", e)
+            Toast.makeText(this, "无法打开文件选择器: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    /**
+     * 将选中的模型文件复制到应用内部存储
+     */
+    private fun copyModelToInternal(uri: Uri) {
+        binding.tvAiStatus.text = "正在导入模型文件..."
+        speakSafely("正在导入模型")
+        scope.launch(Dispatchers.IO) {
+            var input: java.io.InputStream? = null
+            var output: FileOutputStream? = null
+            try {
+                val fileName = getFileName(uri) ?: "model_${System.currentTimeMillis()}.litertlm"
+                val targetDir = File(filesDir, "litert_models")
+                if (!targetDir.exists()) targetDir.mkdirs()
+                val targetFile = File(targetDir, fileName)
+
+                input = contentResolver.openInputStream(uri)
+                if (input == null) {
+                    withContext(Dispatchers.Main) {
+                        binding.tvAiStatus.text = "无法读取选中的文件"
+                        speakSafely("无法读取文件")
+                    }
+                    return@launch
+                }
+                output = FileOutputStream(targetFile)
+                val buffer = ByteArray(8192)
+                var bytesRead: Int
+                var totalBytes = 0L
+                while (input.read(buffer).also { bytesRead = it } != -1) {
+                    output.write(buffer, 0, bytesRead)
+                    totalBytes += bytesRead
+                }
+                output.flush()
+
+                val sizeMb = totalBytes / (1024 * 1024)
+                Log.w(TAG, "模型已复制: ${targetFile.absolutePath} (${sizeMb}MB)")
+
+                aiManager.setManualModelPath(targetFile.absolutePath)
+
+                withContext(Dispatchers.Main) {
+                    binding.tvAiStatus.text = "模型已导入: $fileName (${sizeMb}MB)"
+                    speakSafely("模型导入成功，${sizeMb}兆字节")
+                    Toast.makeText(this@MainActivity, "模型导入成功: $fileName (${sizeMb}MB)", Toast.LENGTH_LONG).show()
+
+                    scope.launch {
+                        aiManager.setEngine(AIInferenceManager.InferenceEngine.EDGE)
+                        val testResult = aiManager.testEdgeConnection()
+                        runOnUiThread {
+                            binding.tvResult.text = testResult
+                            if (testResult.startsWith("✅")) {
+                                binding.tvAiStatus.text = "Gemma 4 Ready"
+                                updateEngineButton()
+                            }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "模型复制失败: ${e.message}", e)
+                withContext(Dispatchers.Main) {
+                    binding.tvAiStatus.text = "模型导入失败: ${e.message}"
+                    speakSafely("模型导入失败")
+                }
+            } finally {
+                try { input?.close() } catch (_: Exception) {}
+                try { output?.close() } catch (_: Exception) {}
+            }
+        }
+    }
+
+    /**
+     * 从 Uri 获取文件名
+     */
+    private fun getFileName(uri: Uri): String? {
+        var result: String? = null
+        if (uri.scheme == "content") {
+            val cursor = contentResolver.query(uri, null, null, null, null)
+            cursor?.use {
+                if (it.moveToFirst()) {
+                    val nameIndex = it.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                    if (nameIndex >= 0) {
+                        result = it.getString(nameIndex)
+                    }
+                }
+            }
+        }
+        if (result == null) {
+            result = uri.lastPathSegment
+        }
+        return result
+    }
+
     private fun downloadModel() {
         if (aiManager.isModelDownloaded()) {
             Toast.makeText(this, "Model already downloaded", Toast.LENGTH_SHORT).show()
             return
         }
-        binding.btnDownloadModel.isEnabled = false
-        binding.btnDownloadModel.text = "Downloading..."
         binding.tvAiStatus.text = getString(com.visionlink.android.R.string.status_downloading)
         binding.tvAiStatus.visibility = android.view.View.VISIBLE
 
@@ -721,39 +855,43 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
                 if (!isDestroyed) {
-                    binding.btnDownloadModel.isEnabled = true
-                    binding.btnDownloadModel.text = if (success) "Model Ready" else "Download Failed"
-                    if (success) speakSafely(if (isEnglish) "Model downloaded. Tap Init AI." else "\u6a21\u578b\u5df2\u4e0b\u8f7d\uff0c\u8bf7\u70b9\u51fb\u521d\u59cb\u5316AI")
-                    else speakSafely(if (isEnglish) "Model download failed" else "\u6a21\u578b\u4e0b\u8f7d\u5931\u6548")
+                    if (success) speakSafely(if (isEnglish) "Model downloaded." else "模型已下载")
+                    else speakSafely(if (isEnglish) "Model download failed" else "模型下载失效")
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Download failed: ${e.message}", e)
                 if (!isDestroyed) {
                     ttsManager.speak("下载失败")
-                    binding.btnDownloadModel.isEnabled = true
-                    binding.btnDownloadModel.text = if (isEnglish) "Download Failed" else "\u4e0b\u8f7d\u5931\u6548"
-                    speakSafely(if (isEnglish) "Model download failed" else "\u6a21\u578b\u4e0b\u8f7d\u5931\u6548")
+                    speakSafely(if (isEnglish) "Model download failed" else "模型下载失效")
                 }
             }
         }
     }
 
     private fun captureAndAnalyze() {
+        // AI 未初始化时自动初始化 YOLO（内置模型，无需下载）
         if (!aiManager.isInitialized()) {
-            Toast.makeText(this, if (isEnglish) "Please initialize AI first" else "请先初始化AI", Toast.LENGTH_SHORT).show()
-            speakSafely(if (isEnglish) "Please initialize AI first" else "请先初始化AI")
+            speakSafely(if (isEnglish) "Initializing AI..." else "正在初始化AI")
+            scope.launch {
+                aiManager.setEngine(AIInferenceManager.InferenceEngine.YOLO)
+                val ok = aiManager.initialize()
+                if (ok) {
+                    runOnUiThread { 
+                        binding.tvAiStatus.text = "YOLO Ready"
+                        updateEngineButton()
+                    }
+                    doCapture()
+                } else {
+                    runOnUiThread {
+                        speakSafely(if (isEnglish) "AI init failed" else "AI初始化失败")
+                    }
+                }
+            }
             return
         }
-        // 检查相机权限
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
-            Log.w(TAG, "Camera permission not granted, requesting...")
-            speakSafely(if (isEnglish) "Camera permission needed" else "需要相机权限")
-            pendingCaptureAfterPermission = true
-            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CAMERA), REQUEST_CAMERA_FOR_CAPTURE)
-            return
-        }
+        // 检查相机状态
         if (!cameraManager.isCameraStarted()) {
-            binding.tvAiStatus.text = if (isEnglish) "Camera not ready" else "相机未启动"
+            binding.tvAiStatus.text = if (isEnglish) "Camera not ready" else "相机未启动，正在重启"
             speakSafely(if (isEnglish) "Camera not ready, restarting..." else "相机未启动，正在重启")
             scope.launch {
                 try {
@@ -761,11 +899,13 @@ class MainActivity : AppCompatActivity() {
                     delay(1500)
                     if (!cameraManager.isCameraStarted()) {
                         binding.tvAiStatus.text = if (isEnglish) "Camera restart failed" else "相机重启失败"
+                        speakSafely(if (isEnglish) "Camera restart failed" else "相机重启失败，请稍后重试")
                         return@launch
                     }
                     doCapture()
                 } catch (e: Exception) {
                     binding.tvAiStatus.text = if (isEnglish) "Camera error" else "相机错误"
+                    Log.e(TAG, "Camera restart error: ${e.message}", e)
                 }
             }
             return
@@ -1158,6 +1298,8 @@ class MainActivity : AppCompatActivity() {
         if (isGuideMode && mode != 4) stopGuideMode() // 切回模式1-3时先退出指向引导
         currentMode = mode
         updateModeUI()
+        // 重置指纹，确保切换后立即播报新结果
+        lastContinuousFingerprint = null
         val modeName = when (mode) {
             1 -> if (isEnglish) "Obstacle Avoidance" else "障碍物检测"
             2 -> if (isEnglish) "Text Reading" else "文字识别"
@@ -1165,7 +1307,35 @@ class MainActivity : AppCompatActivity() {
             4 -> if (isEnglish) "Pointing Guide" else "指向引导"
             else -> if (isEnglish) "Unknown" else "未知"
         }
-        speakSafely("Mode: $modeName")
+        speakSafely("已切换到$modeName")
+        // 高亮当前模式按钮
+        updateModeButtonColors(mode)
+        // 如果已在连续检测中，立即触发一次检测
+        if (isContinuousMode && aiManager.isInitialized()) {
+            // 连续循环会自动用新 mode，这里只是确保快速响应
+            Log.d(TAG, "Mode switched during continuous, will use new mode: $mode")
+        }
+    }
+
+    /** 高亮当前选中的模式按钮 */
+    private fun updateModeButtonColors(mode: Int) {
+        val activeColor = 0xFFFF0000.toInt()
+        val normalColors = mapOf(
+            1 to 0xFFFF0000.toInt(),
+            2 to 0xFFFFAA00.toInt(),
+            3 to 0xFF0000FF.toInt(),
+            4 to 0xFF00BCD4.toInt()
+        )
+        binding.btnMode1.setBackgroundColor(normalColors[1]!!)
+        binding.btnMode2.setBackgroundColor(normalColors[2]!!)
+        binding.btnMode3.setBackgroundColor(normalColors[3]!!)
+        binding.btnMode4.setBackgroundColor(normalColors[4]!!)
+        when (mode) {
+            1 -> binding.btnMode1.setBackgroundColor(activeColor)
+            2 -> binding.btnMode2.setBackgroundColor(activeColor)
+            3 -> binding.btnMode3.setBackgroundColor(activeColor)
+            4 -> binding.btnMode4.setBackgroundColor(activeColor)
+        }
     }
 
     private fun updateModeUI() {
@@ -1192,17 +1362,27 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun checkPermissions() {
-        val perms = mutableListOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO)
+        // 必须权限：相机 + 录音
+        val requiredPerms = mutableListOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO)
+        // 可选权限：通知（拒绝不影响核心功能）
+        val optionalPerms = mutableListOf<String>()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            perms.add(Manifest.permission.POST_NOTIFICATIONS)
+            optionalPerms.add(Manifest.permission.POST_NOTIFICATIONS)
         }
-        val missing = perms.filter { ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED }
-        if (missing.isEmpty()) {
-            Log.d(TAG, "Permissions granted")
+
+        val missingRequired = requiredPerms.filter { ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED }
+        val missingOptional = optionalPerms.filter { ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED }
+
+        if (missingRequired.isEmpty()) {
+            Log.d(TAG, "Required permissions granted")
+            // 可选权限单独请求，不影响核心流程
+            if (missingOptional.isNotEmpty()) {
+                ActivityCompat.requestPermissions(this, missingOptional.toTypedArray(), 1004)
+            }
             startCameraWithRetry()
             initVoiceAndRing()
         } else {
-            ActivityCompat.requestPermissions(this, missing.toTypedArray(), REQUEST_PERMISSIONS)
+            ActivityCompat.requestPermissions(this, missingRequired.toTypedArray(), REQUEST_PERMISSIONS)
         }
     }
 
@@ -1222,6 +1402,8 @@ class MainActivity : AppCompatActivity() {
                 cameraManager.startCamera()
                 if (!isDestroyed) {
                     binding.tvStatus.text = getString(com.visionlink.android.R.string.status_ready)
+                    // 相机就绪后自动初始化 YOLO 引擎（内置模型，无需网络/下载）
+                    autoInitYolo()
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Camera failed: ${e.message}", e)
@@ -1236,12 +1418,48 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * 自动初始化 YOLO 引擎（内置模型，无需网络/下载）
+     * 相机就绪后调用，让用户可以直接拍照/连续检测
+     */
+    private fun autoInitYolo() {
+        if (aiManager.isInitialized()) return
+        scope.launch(Dispatchers.IO) {
+            try {
+                aiManager.setEngine(AIInferenceManager.InferenceEngine.YOLO)
+                val ok = aiManager.initialize()
+                if (ok && !isDestroyed) {
+                    runOnUiThread {
+                        binding.tvAiStatus.text = "YOLO Ready"
+                        updateEngineButton()
+                        Log.d(TAG, "YOLO auto-initialized on startup")
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Auto-init YOLO failed: ${e.message}")
+            }
+        }
+    }
+
     override fun onRequestPermissionsResult(code: Int, perms: Array<String>, results: IntArray) {
         super.onRequestPermissionsResult(code, perms, results)
         when (code) {
             REQUEST_PERMISSIONS -> {
-                if (results.all { it == PackageManager.PERMISSION_GRANTED }) startCameraWithRetry()
-                else Toast.makeText(this, getString(com.visionlink.android.R.string.perm_camera_rationale), Toast.LENGTH_LONG).show()
+                // 只检查必须权限（相机+录音），通知权限被拒不影响核心功能
+                val cameraGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+                val audioGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+                if (cameraGranted && audioGranted) {
+                    Log.d(TAG, "Required permissions granted, starting camera")
+                    startCameraWithRetry()
+                    initVoiceAndRing()
+                } else {
+                    Log.w(TAG, "Required permissions denied: camera=$cameraGranted, audio=$audioGranted")
+                    Toast.makeText(this, getString(com.visionlink.android.R.string.perm_camera_rationale), Toast.LENGTH_LONG).show()
+                }
+            }
+            1004 -> {
+                // 可选权限（通知）结果，忽略
+                Log.d(TAG, "Optional permission result: $perms -> $results")
             }
             REQUEST_CAMERA_FOR_CAPTURE -> {
                 if (results.isNotEmpty() && results[0] == PackageManager.PERMISSION_GRANTED) {
@@ -1427,6 +1645,16 @@ class MainActivity : AppCompatActivity() {
                         speakSafely(if (isEnglish) "Glasses connection failed" else "眼镜连接失败")
                     }
                 }
+            }
+        }
+        
+        // 处理模型文件选择结果
+        if (requestCode == REQUEST_MODEL_FILE) {
+            if (resultCode == RESULT_OK && data?.data != null) {
+                Log.i(TAG, "Model file selected: ${data.data}")
+                copyModelToInternal(data.data!!)
+            } else {
+                Log.w(TAG, "Model file selection cancelled")
             }
         }
     }

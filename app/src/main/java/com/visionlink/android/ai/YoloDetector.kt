@@ -5,9 +5,12 @@ import android.graphics.Bitmap
 import android.util.Log
 import com.google.mediapipe.framework.image.BitmapImageBuilder
 import com.google.mediapipe.tasks.core.BaseOptions
+import com.google.mediapipe.tasks.core.Delegate
 import com.google.mediapipe.tasks.vision.core.RunningMode
 import com.google.mediapipe.tasks.vision.objectdetector.ObjectDetector
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.math.tan
+import kotlin.math.roundToInt
 
 /**
  * YOLO / 物体检测器 — 基于 MediaPipe ObjectDetector (EfficientDet-Lite0)
@@ -28,6 +31,12 @@ class YoloDetector(private val context: Context) {
         private const val MODEL_ASSET = "mediapipe/efficientdet_lite0.tflite"
         private const val MAX_RESULTS = 10
         private const val MIN_SCORE = 0.35f
+
+        // 相机垂直视场角（度），手机主摄约 45°
+        private const val VERTICAL_FOV_DEG = 45f
+        private val tanHalfVFov = tan(Math.toRadians(VERTICAL_FOV_DEG / 2.0)).toFloat()
+        // 平均步长（米）
+        private const val STEP_LENGTH_M = 0.6f
     }
 
     data class Detection(
@@ -49,25 +58,60 @@ class YoloDetector(private val context: Context) {
 
     /**
      * 初始化检测器（同步，耗时约几百毫秒）
+     *
+     * 使用 CPU 代理以确保最大兼容性。GPU 代理在某些设备上会导致初始化失败。
+     *
      * @return true 如果初始化成功
      */
     fun initialize(): Boolean {
         if (initialized.get()) return true
+
+        // 先验证模型文件存在
+        try {
+            val assetList = context.assets.list("mediapipe")
+            if (assetList == null || !assetList.contains("efficientdet_lite0.tflite")) {
+                Log.e(TAG, "模型文件不存在: $MODEL_ASSET (assets/mediapipe/ 内容: ${assetList?.joinToString()})")
+                return false
+            }
+            Log.w(TAG, "模型文件确认存在: $MODEL_ASSET")
+        } catch (e: Exception) {
+            Log.e(TAG, "无法访问 assets 目录: ${e.message}", e)
+            return false
+        }
+
+        // 尝试 CPU 代理初始化（最大兼容性）
+        val ok = tryInit(Delegate.CPU)
+        if (ok) {
+            Log.w(TAG, "物体检测器初始化完成 (CPU 代理, efficientdet_lite0)")
+            return true
+        }
+
+        // CPU 失败时尝试 GPU 代理
+        Log.w(TAG, "CPU 代理初始化失败，尝试 GPU 代理...")
+        return tryInit(Delegate.GPU)
+    }
+
+    /**
+     * 使用指定代理尝试初始化
+     */
+    private fun tryInit(delegate: Delegate): Boolean {
         return try {
+            val baseOptions = BaseOptions.builder()
+                .setModelAssetPath(MODEL_ASSET)
+                .setDelegate(delegate)
+                .build()
+
             val options = ObjectDetector.ObjectDetectorOptions.builder()
-                .setBaseOptions(
-                    BaseOptions.builder().setModelAssetPath(MODEL_ASSET).build()
-                )
+                .setBaseOptions(baseOptions)
                 .setRunningMode(RunningMode.IMAGE)
                 .setMaxResults(MAX_RESULTS)
                 .setScoreThreshold(MIN_SCORE)
                 .build()
             detector = ObjectDetector.createFromOptions(context, options)
             initialized.set(true)
-            Log.i(TAG, "物体检测器初始化完成 (efficientdet_lite0)")
             true
         } catch (e: Exception) {
-            Log.e(TAG, "物体检测器初始化失败: ${e.message}", e)
+            Log.e(TAG, "初始化失败 ($delegate): ${e.message}", e)
             false
         }
     }
@@ -127,7 +171,7 @@ class YoloDetector(private val context: Context) {
 
         return when (mode) {
             1 -> formatObstacleResult(detections)
-            2 -> "YOLO 模式不支持文字识别，请切换到 Gemma 4 或 API 引擎"
+            2 -> "文字识别请使用 OCR 引擎"
             3 -> formatSceneResult(detections)
             else -> formatSceneResult(detections)
         }
@@ -135,25 +179,62 @@ class YoloDetector(private val context: Context) {
 
     /**
      * 格式化障碍物检测结果
-     * 按距离（框高度）从近到远排序，播报最近的障碍物
+     * 按距离从近到远排序，播报最近的障碍物
+     * 输出格式："前方两米有台阶，偏左"
      */
     private fun formatObstacleResult(detections: List<Detection>): String {
-        // 按框高度降序（高度越大=越近）
-        val sorted = detections.sortedByDescending { it.height }
-        val nearest = sorted.take(3)
+        // 按估算距离从近到远排序
+        val withDistance = detections.map { det ->
+            val meters = estimateMeters(det)
+            det to meters
+        }.sortedBy { it.second ?: Float.MAX_VALUE }
+
+        val nearest = withDistance.take(3)
 
         return buildString {
-            append("检测到 ${detections.size} 个物体。")
-            nearest.forEachIndexed { index, det ->
-                val direction = directionPhrase(det.centerX)
-                val distance = distancePhrase(det.height)
+            nearest.forEachIndexed { index, (det, meters) ->
+                val direction = mainDirection(det.centerX)
+                val offset = offsetDirection(det.centerX)
+                val distance = distancePhrase(det, meters)
                 if (index == 0) {
-                    append("最近障碍物：${det.labelZh}，$direction，$distance。")
+                    append("$direction$distance${det.labelZh}$offset")
                 } else {
-                    append("${det.labelZh}，$direction，$distance。")
+                    append("。$direction$distance${det.labelZh}$offset")
                 }
             }
         }
+    }
+
+    /**
+     * 使用尺寸先验 + 小孔成像模型估算距离（米）
+     * distance ≈ 真实高度 / (2 × 框高占比 × tan(垂直FOV/2))
+     */
+    private fun estimateMeters(det: Detection): Float? {
+        val realHeight = SizePriorsM.heightOf(det.label) ?: return null
+        val frac = det.height
+        if (frac < 0.02f) return null
+        return (realHeight / (2f * frac * tanHalfVFov)).coerceIn(0.3f, 50f)
+    }
+
+    /** 距离描述：有尺寸先验时报“X米”，无先验时退回框高分档 */
+    private fun distancePhrase(det: Detection, meters: Float?): String {
+        if (meters != null) {
+            val mStr = if (meters < 1.0f) "不到一米" else "${fmtMeters(meters)}米"
+            return "${mStr}有"
+        }
+        val h = det.height
+        return when {
+            h >= 0.55f -> "跟前一两步有"
+            h >= 0.30f -> "三到五步处有"
+            h >= 0.12f -> "约十步处有"
+            else -> "远处有"
+        }
+    }
+
+    /** 米数取到 0.5 精度 */
+    private fun fmtMeters(m: Float): String {
+        val half = (m * 2).roundToInt() / 2f
+        return if (half % 1f == 0f) half.toInt().toString() else half.toString()
     }
 
     /**
@@ -180,21 +261,27 @@ class YoloDetector(private val context: Context) {
         }
     }
 
-    /** 根据物体中心 x 坐标给出方位描述 */
-    private fun directionPhrase(centerX: Float): String = when {
-        centerX < 0.2f -> "左侧九点钟方向"
-        centerX < 0.42f -> "左前方"
-        centerX <= 0.58f -> "正前方"
-        centerX <= 0.8f -> "右前方"
-        else -> "右侧三点钟方向"
+    /** 主方向：始终是“前方”（用户面向的方向） */
+    private fun mainDirection(centerX: Float): String = when {
+        centerX < 0.2f -> "左侧"
+        centerX > 0.8f -> "右侧"
+        else -> "前方"
     }
 
-    /** 根据框高度估算距离（简化版） */
-    private fun distancePhrase(boxHeight: Float): String = when {
-        boxHeight >= 0.55f -> "就在跟前，约一两步"
-        boxHeight >= 0.30f -> "约三到五步"
-        boxHeight >= 0.12f -> "约十步左右"
-        else -> "较远，超过十五步"
+    /** 偏移方向：偏左/偏右/无，用于补充描述 */
+    private fun offsetDirection(centerX: Float): String = when {
+        centerX in 0.2f..0.42f -> "，偏左"
+        centerX in 0.58f..0.8f -> "，偏右"
+        else -> ""
+    }
+
+    /** 根据物体中心 x 坐标给出方位描述（场景描述模式用） */
+    private fun directionPhrase(centerX: Float): String = when {
+        centerX < 0.2f -> "左侧"
+        centerX < 0.42f -> "左前方"
+        centerX <= 0.58f -> "前方"
+        centerX <= 0.8f -> "右前方"
+        else -> "右侧"
     }
 
     /**

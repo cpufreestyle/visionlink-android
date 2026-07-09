@@ -43,7 +43,7 @@ class UpdateDialog(
         }
 
         val message = buildString {
-            appendLine("发现新版本: v${updateInfo.versionName}")
+            appendLine("发现新版本: v${updateInfo.versionName} (${updateInfo.source})")
             appendLine("大小: $sizeText")
             appendLine("发布时间: ${updateInfo.publishedAt.take(10)}")
             appendLine()

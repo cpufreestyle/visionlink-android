@@ -226,17 +226,22 @@ object AICoreChecker {
     ) {
         fun getSummary(): String {
             return """
-                === AICore Diagnostic Result ===
+                === AICore 诊断结果 ===
                 Android 14+ (API 34+): $androidVersionOk
-                Device Supported: $deviceSupported
+                设备型号支持: $deviceSupported
                 RAM ≥ 8GB: $ramOk
                 Play Services ≥ 23.30.15: $playServicesOk
-                AICore Class Available: $aicoreClassAvailable
-                AICore Initialization: $aicoreInitializationOk
+                AICore 类可用: $aicoreClassAvailable
+                AICore 初始化: $aicoreInitializationOk
                 
                 ====================================
-                AICore Available: $isAvailable
+                AICore 可用: $isAvailable
                 ====================================
+                
+                注: AICore (Gemini Nano) 为可选功能，需要特定设备
+                (Pixel 8/9, Samsung S24/S25) + Android 14+。
+                本应用已内置 YOLO 物体检测和 Gemma 4 端侧模型作为替代，
+                AICore 不可用不影响正常使用。
             """.trimIndent()
         }
     }

@@ -11,8 +11,8 @@ android {
         applicationId = "com.visionlink.android"
         minSdk = 31
         targetSdk = 35
-        versionCode = 58
-        versionName = "5.8.0"
+        versionCode = 593
+        versionName = "5.9.3"
 
         multiDexEnabled = true
 
@@ -116,6 +116,9 @@ dependencies {
 
     // MediaPipe Tasks Vision: 端侧实时手部关键点 + 物体检测（指向引导模式）
     implementation("com.google.mediapipe:tasks-vision:0.10.14")
+
+    // ML Kit Text Recognition: 端侧离线 OCR（模式2 文字识别）
+    implementation("com.google.mlkit:text-recognition:16.0.1")
 
     // Google AI Edge LiteRT-LM for on-device LLM inference
     implementation("com.google.ai.edge.litertlm:litertlm-android:0.13.1")

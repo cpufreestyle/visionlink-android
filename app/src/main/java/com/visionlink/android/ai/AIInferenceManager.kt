@@ -21,6 +21,7 @@ import okhttp3.Request
 import okhttp3.Response
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.ConnectionPool
 import org.json.JSONArray
 import org.json.JSONObject
 import com.google.ai.edge.litertlm.*
@@ -28,6 +29,7 @@ import com.visionlink.android.BuildConfig
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
+import java.util.concurrent.TimeUnit
 
 /**
  * AI Inference Manager - v4.7.0 (Real API Integration)
@@ -82,13 +84,16 @@ class AIInferenceManager(private val context: Context) {
     private var currentMode: InferenceMode = InferenceMode.SINGLE_SHOT
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val httpClient = OkHttpClient.Builder()
-        .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
-        .readTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+        .connectTimeout(20, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(90, java.util.concurrent.TimeUnit.SECONDS)
         .writeTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+        .connectionPool(ConnectionPool(5, 5, java.util.concurrent.TimeUnit.MINUTES))
+        .retryOnConnectionFailure(true)
         .build()
     private val pingHttpClient = OkHttpClient.Builder()
-        .connectTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
-        .readTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
+        .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(20, java.util.concurrent.TimeUnit.SECONDS)
+        .retryOnConnectionFailure(true)
         .build()
 
     // ========== API Test Method ==========
@@ -258,20 +263,11 @@ class AIInferenceManager(private val context: Context) {
         Log.d(TAG, "Initializing AI Inference Manager with ${currentEngine.name}")
 
         // 对 Moonshot 引擎做一次 ping 检查，验证 API Key 有效
+        // 注意：ping 失败不阻塞初始化，仅记录警告（网络波动不应阻止引擎切换）
         if (currentEngine == InferenceEngine.STEPFUN) {
             val pingOk = pingMoonshotAPI()
             if (!pingOk) {
-                Log.e(TAG, "Moonshot API ping failed — API Key may be invalid")
-                updateState {
-                    copy(
-                        engine = currentEngine,
-                        isInitialized = false,
-                        modelDownloaded = false,
-                        downloadProgress = 0,
-                        initError = "API Key 无效或网络不可用"
-                    )
-                }
-                return@withContext false
+                Log.w(TAG, "StepFun API ping failed — 可能是网络波动，初始化继续")
             }
         }
 
@@ -380,7 +376,11 @@ class AIInferenceManager(private val context: Context) {
                 InferenceEngine.LM_STUDIO -> runLmStudioInference(prompt, bitmap)
                 InferenceEngine.EDGE -> runEdgeInference(prompt, bitmap)
                 InferenceEngine.CUSTOM -> callCustomAPI(prompt, bitmap)
-                InferenceEngine.YOLO -> runYoloDetection(bitmap, mode)
+                InferenceEngine.YOLO -> {
+                    // YOLO 引擎：模式2用离线OCR，其他模式用物体检测
+                    if (mode == 2) runOcrRecognition(bitmap)
+                    else runYoloDetection(bitmap, mode)
+                }
                 else -> "Unsupported engine: $currentEngine"
             }
 
@@ -410,7 +410,7 @@ class AIInferenceManager(private val context: Context) {
     private suspend fun callMoonshotAPI(prompt: String, bitmap: Bitmap): String =
         withContext(Dispatchers.IO) {
             var retryCount = 0
-            val maxRetries = 2
+            val maxRetries = 3
 
             while (retryCount <= maxRetries) {
                 try {
@@ -461,7 +461,7 @@ class AIInferenceManager(private val context: Context) {
                         Log.e(TAG, "API call failed: ${response.code}, ${response.message}")
                         if (retryCount < maxRetries) {
                             retryCount++
-                            delay(1000)
+                            delay(1500)
                             continue
                         }
                         return@withContext "API 调用失败: ${response.message}"
@@ -473,7 +473,7 @@ class AIInferenceManager(private val context: Context) {
                         Log.e(TAG, "API error: $errorMsg")
                     if (retryCount < maxRetries) {
                         retryCount++
-                        delay(1000)
+                        delay(1500)
                         continue
                     }
                     return@withContext "API 错误: $errorMsg"
@@ -498,7 +498,7 @@ class AIInferenceManager(private val context: Context) {
                     Log.e(TAG, "Network error: ${e.message}", e)
                     if (retryCount < maxRetries) {
                         retryCount++
-                        delay(2000)
+                        delay(3000)
                         continue
                     }
                     return@withContext "网络错误: ${e.message}"
@@ -506,7 +506,7 @@ class AIInferenceManager(private val context: Context) {
                     Log.e(TAG, "API error: ${e.message}", e)
                     if (retryCount < maxRetries) {
                         retryCount++
-                        delay(1000)
+                        delay(2000)
                         continue
                     }
                     return@withContext "错误: ${e.message}"
@@ -747,13 +747,14 @@ class AIInferenceManager(private val context: Context) {
 
     private fun buildPrompt(mode: Int): String {
         return when (mode) {
-            1 -> "你是一个视觉辅助助手，帮助视障用户识别前方障碍物。" +
-                 "请观察图像中心区域，识别最近的障碍物并估算距离。" +
-                 "用中文回答，不超过25个字。格式：[障碍物], [方向], [距离]"
-            2 -> "你是一个OCR助手。请精确提取图像中的所有中文和英文文字。" +
-                 "用检测到的语言回答。"
-            3 -> "你是一个场景描述助手，为视障用户描述场景。" +
-                 "用温暖自然的中文描述场景，不超过50个字。"
+            1 -> "你是视障用户的视觉辅助助手。请识别图像中最近的障碍物，" +
+                 "估算其距离（以米为单位）和方向（偏左/正前方/偏右）。" +
+                 "用中文回答，不超过20个字。格式示例：\"前方两米有台阶，偏左\""
+            2 -> "请精确提取图像中所有可见的文字（中文和英文）。" +
+                 "按从上到下、从左到右的顺序输出。只输出识别到的文字内容，不要添加解释。"
+            3 -> "你是视障用户的场景描述助手。请用简洁自然的中文描述当前场景，" +
+                 "包括环境类型、光线条件和主要物体。不超过30个字。" +
+                 "格式示例：\"你在一个明亮的室内走廊\""
             else -> "请用中文简要描述这张图片的内容，不超过50个字。"
         }
     }
@@ -764,6 +765,8 @@ class AIInferenceManager(private val context: Context) {
         scope.cancel()
         yoloDetector?.release()
         yoloDetector = null
+        ocrRecognizer?.release()
+        ocrRecognizer = null
         litertEngine?.close()
         litertEngine = null
         currentEngine = InferenceEngine.NONE
@@ -814,21 +817,116 @@ class AIInferenceManager(private val context: Context) {
     // ========== YOLO Object Detector Instance ==========
     private var yoloDetector: YoloDetector? = null
 
+    // ========== OCR Recognizer Instance (ML Kit) ==========
+    private var ocrRecognizer: OcrRecognizer? = null
+
     // ========== Google AI Edge LiteRT-LM Inference ==========
+
+    /**
+     * 手动设置模型文件路径（由文件选择器调用）
+     * 设置后下次初始化 EDGE 引擎时将使用此路径
+     */
+    fun setManualModelPath(path: String) {
+        manualModelPath = path
+        Log.w(TAG, "手动设置模型路径: $path")
+    }
+
+    private var manualModelPath: String? = null
+
+    /**
+     * 在多个可能的位置查找 .litertlm 模型文件
+     * Google AI Edge Gallery 下载的模型可能存放在不同位置
+     */
+    private fun findModelFile(modelDir: File): File? {
+        // 0. 优先使用手动指定的路径
+        manualModelPath?.let { path ->
+            val f = File(path)
+            if (f.exists() && f.isFile && f.length() > 1_000_000) {
+                Log.w(TAG, "使用手动指定的模型: ${f.absolutePath} (${f.length() / 1048576}MB)")
+                return f
+            }
+        }
+
+        // 1. 先查默认目录（递归）
+        val inModelDir = scanForLitertlm(modelDir)
+        if (inModelDir != null) return inModelDir
+
+        // 2. 查内部存储 models 目录（getGemmaModelPath 使用的目录）
+        val internalModels = File(context.filesDir, "models")
+        scanForLitertlm(internalModels)?.let { return it }
+
+        // 3. 查外部存储的常见下载位置
+        val searchDirs = mutableListOf<File>()
+        
+        // /sdcard/Download/
+        File(System.getenv("EXTERNAL_STORAGE") ?: "/sdcard", "Download")?.let { searchDirs.add(it) }
+        // /sdcard/Documents/
+        File(System.getenv("EXTERNAL_STORAGE") ?: "/sdcard", "Documents")?.let { searchDirs.add(it) }
+        // /sdcard/ 根目录（某些下载工具会放在根目录）
+        File(System.getenv("EXTERNAL_STORAGE") ?: "/sdcard")?.let { searchDirs.add(it) }
+        // getExternalFilesDir(null)/ 根目录
+        context.getExternalFilesDir(null)?.let { searchDirs.add(it) }
+        // getExternalFilesDir(null)/litert_models/
+        context.getExternalFilesDir(null)?.let { searchDirs.add(File(it, MODEL_DIR)) }
+        // getExternalFilesDir(null)/models/
+        context.getExternalFilesDir(null)?.let { searchDirs.add(File(it, "models")) }
+        // getExternalFilesDir(null)/Download/
+        context.getExternalFilesDir(null)?.let { searchDirs.add(File(it, "Download")) }
+        // cacheDir/litert_models/
+        searchDirs.add(File(context.cacheDir, MODEL_DIR))
+        // cacheDir/models/
+        searchDirs.add(File(context.cacheDir, "models"))
+        // Google AI Edge Gallery 可能的存储路径
+        File("/sdcard/Android/data/com.google.ai.edge.gallery/files")?.let { searchDirs.add(it) }
+        File("/sdcard/Android/data/com.google.ai.edge.gallery/files/Download")?.let { searchDirs.add(it) }
+        File("/sdcard/Android/data/com.google.ai.edge.gallery/files/models")?.let { searchDirs.add(it) }
+
+        for (dir in searchDirs) {
+            val found = scanForLitertlm(dir)
+            if (found != null) {
+                Log.w(TAG, "在备用位置找到模型: ${dir.absolutePath}")
+                return found
+            }
+        }
+        return null
+    }
+
+    /** 递归扫描目录下的 .litertlm 文件（最多 3 层深度） */
+    private fun scanForLitertlm(dir: File, depth: Int = 0): File? {
+        if (!dir.exists() || !dir.isDirectory || depth > 3) return null
+        val files = dir.listFiles { f -> 
+            f.isFile && f.extension.equals("litertlm", ignoreCase = true) && f.length() > 1_000_000
+        }?.sortedByDescending { it.length() }
+        
+        // 直接找到文件
+        if (!files.isNullOrEmpty()) return files.first()
+        
+        // 递归搜索子目录
+        val subDirs = dir.listFiles { f -> f.isDirectory } ?: return null
+        for (subDir in subDirs) {
+            val found = scanForLitertlm(subDir, depth + 1)
+            if (found != null) return found
+        }
+        return null
+    }
+
     private suspend fun runEdgeInference(prompt: String, bitmap: Bitmap): String =
         withContext(Dispatchers.IO) {
             try {
                 Log.d(TAG, "Running LiteRT-LM inference with Gemma 4 E2B...")
 
-                // 1. Find model file (.litertlm format)
+                // 1. Find model file (.litertlm format) — 自动匹配任意文件名
                 val modelDir = File(context.filesDir, MODEL_DIR)
                 if (!modelDir.exists()) modelDir.mkdirs()
 
-                val modelFile = File(modelDir, "$GEMMA_MODEL_NAME.litertlm")
-                if (!modelFile.exists()) {
-                    Log.w(TAG, "LiteRT-LM model not found at ${modelFile.absolutePath}")
-                    return@withContext "错误: 本地模型未下载。请先从 Google AI Edge Gallery 下载 Gemma 4 E2B 模型，或将 .litertlm 文件复制到 ${modelFile.absolutePath}"
+                val modelFile = findModelFile(modelDir)
+                if (modelFile == null || !modelFile.exists()) {
+                    Log.w(TAG, "No .litertlm model found in ${modelDir.absolutePath}")
+                    val existing = modelDir.listFiles()?.joinToString { it.name } ?: "(empty)"
+                    Log.w(TAG, "Files in model dir: $existing")
+                    return@withContext "错误: 本地模型未下载。请从 Google AI Edge Gallery 下载 Gemma 模型，或将 .litertlm 文件复制到 ${modelDir.absolutePath}\n当前目录文件: $existing"
                 }
+                Log.i(TAG, "Using model: ${modelFile.name} (${modelFile.length() / 1048576}MB)")
 
                 // 2. Initialize LiteRT-LM Engine
                 if (litertEngine == null) {
@@ -880,11 +978,30 @@ class AIInferenceManager(private val context: Context) {
      */
     suspend fun testEdgeConnection(): String = withContext(Dispatchers.IO) {
         try {
+            // 搜索所有可能的位置
             val modelDir = File(context.filesDir, MODEL_DIR)
-            val modelFile = File(modelDir, "$GEMMA_MODEL_NAME.litertlm")
+            val modelFile = findModelFile(modelDir)
 
-            if (!modelFile.exists()) {
-                "⚠️ 模型未找到: ${modelFile.absolutePath}\n请从 Google AI Edge Gallery App 下载 Gemma 4 E2B，或手动复制 .litertlm 文件到该路径"
+            if (modelFile == null) {
+                // 列出所有搜索过的目录及其内容
+                val searchPaths = mutableListOf<String>()
+                searchPaths.add("${modelDir.absolutePath}: ${modelDir.listFiles()?.joinToString { it.name } ?: "(不存在)"}")
+                val internalModels = File(context.filesDir, "models")
+                searchPaths.add("${internalModels.absolutePath}: ${internalModels.listFiles()?.joinToString { it.name } ?: "(不存在)"}")
+                context.getExternalFilesDir(null)?.let { 
+                    searchPaths.add("${it.absolutePath}: ${it.listFiles()?.joinToString { it.name } ?: "(空)"}")
+                    val d = File(it, MODEL_DIR)
+                    searchPaths.add("${d.absolutePath}: ${d.listFiles()?.joinToString { it.name } ?: "(不存在)"}")
+                }
+                val downloadDir = File(System.getenv("EXTERNAL_STORAGE") ?: "/sdcard", "Download")
+                val litertlmFiles = downloadDir.listFiles { f -> f.extension.equals("litertlm", ignoreCase = true) }
+                searchPaths.add("${downloadDir.absolutePath}: ${litertlmFiles?.joinToString { f -> "${f.name}(${f.length()/1048576}MB)" } ?: "(无 litertlm)"}")
+                // Google AI Edge Gallery
+                val galleryDir = File("/sdcard/Android/data/com.google.ai.edge.gallery/files")
+                if (galleryDir.exists()) {
+                    searchPaths.add("${galleryDir.absolutePath}: ${galleryDir.listFiles()?.joinToString { it.name } ?: "(空)"}")
+                }
+                "⚠️ 未找到 .litertlm 模型文件\n已搜索以下位置:\n${searchPaths.joinToString("\n")}\n\n请将 .litertlm 模型文件复制到以下任一位置:\n1. ${modelDir.absolutePath}\n2. ${downloadDir.absolutePath}\n3. ${context.getExternalFilesDir(null)?.absolutePath}\n\n或通过“更多 → 选择模型文件”手动指定"
             } else {
                 val sizeMb = modelFile.length() / (1024 * 1024)
                 "✅ 模型已就绪: ${modelFile.name} (${sizeMb}MB)\n路径: ${modelFile.absolutePath}"
@@ -893,6 +1010,32 @@ class AIInferenceManager(private val context: Context) {
             "❌ 检查失败: ${e.message}"
         }
     }
+
+    // ========== OCR Text Recognition (ML Kit) ==========
+
+    /**
+     * 使用 ML Kit 进行端侧离线文字识别（模式2）
+     *
+     * 完全离线，支持中英文，速度约 100-300ms/帧。
+     * 与 API/Gemma 的区别：
+     * - 速度：~200ms vs ~2-3s
+     * - 网络：完全离线
+     * - 输出：纯文字内容（无语义理解）
+     */
+    private suspend fun runOcrRecognition(bitmap: Bitmap): String =
+        withContext(Dispatchers.IO) {
+            try {
+                if (ocrRecognizer == null) {
+                    ocrRecognizer = OcrRecognizer()
+                }
+                val result = ocrRecognizer!!.recognize(bitmap)
+                Log.d(TAG, "OCR result: ${result.take(80)}")
+                result
+            } catch (e: Exception) {
+                Log.e(TAG, "OCR recognition failed: ${e.message}", e)
+                "错误: 文字识别失败 - ${e.message}"
+            }
+        }
 
     // ========== YOLO Object Detection ==========
 
@@ -905,7 +1048,7 @@ class AIInferenceManager(private val context: Context) {
      * - 网络：完全离线 vs 完全离线（但需模型文件）
      *
      * @param bitmap 输入图像
-     * @param mode 检测模式: 1=障碍物, 2=文字(不支持), 3=场景描述
+     * @param mode 检测模式: 1=障碍物, 3=场景描述
      */
     private suspend fun runYoloDetection(bitmap: Bitmap, mode: Int): String =
         withContext(Dispatchers.IO) {
