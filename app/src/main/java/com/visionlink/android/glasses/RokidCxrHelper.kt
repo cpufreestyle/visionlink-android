@@ -3,16 +3,28 @@ package com.visionlink.android.glasses
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.Rect
+import android.graphics.Typeface
+import android.util.Base64
 import android.util.Log
 import android.util.Pair as AndroidPair
 import com.rokid.cxr.link.CXRLink
 import com.rokid.cxr.link.callbacks.ICXRLinkCbk
+import com.rokid.cxr.link.callbacks.ICustomCmdCbk
 import com.rokid.cxr.link.callbacks.ICustomViewCbk
 import com.rokid.cxr.link.utils.CxrDefs
 import com.rokid.cxr.link.utils.GlassInfo
+import com.rokid.cxr.link.utils.IconInfo
 import com.rokid.sprite.aiapp.externalapp.auth.AuthorizationHelper
 import com.rokid.sprite.aiapp.externalapp.auth.AuthResult
 import com.rokid.sprite.aiapp.externalapp.auth.GlassPermission
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.ByteArrayOutputStream
 
 /**
  * Rokid CXR-L SDK 封装工具类
@@ -27,6 +39,18 @@ import com.rokid.sprite.aiapp.externalapp.auth.GlassPermission
  *
  * 参考: sdk/rokid-cxrm demo + client-l SDK 反编译
  */
+/**
+ * 眼镜交互回调 — 接收眼镜端的点击命令和语音助手事件
+ */
+interface GlassesInteractionCallback {
+    /** 眼镜端发送了自定义命令（如点击图标/按钮） */
+    fun onCommand(cmd: String, data: ByteArray?)
+    /** 眼镜语音助手启动（用户按了眼镜 AI 键） */
+    fun onAiAssistStart()
+    /** 眼镜语音助手停止 */
+    fun onAiAssistStop()
+}
+
 object RokidCxrHelper {
     private const val TAG = "RokidCxrHelper"
 
@@ -44,24 +68,40 @@ object RokidCxrHelper {
     var isConnected = false
         private set
 
+    /** 交互回调 */
+    private var interactionCallback: GlassesInteractionCallback? = null
+
+    /** 设置交互回调 */
+    fun setInteractionCallback(callback: GlassesInteractionCallback) {
+        interactionCallback = callback
+    }
+
     /** 是否已安装 Rokid AI App */
     fun isRokidAppInstalled(activity: Activity): Boolean {
         return AuthorizationHelper.isRokidAppInstalled(activity)
     }
 
     /**
+     * 授权请求结果
+     */
+    data class AuthRequestResult(
+        val started: Boolean,          // true = 授权 Activity 已启动，等待 onActivityResult
+        val immediateToken: String?   // 非 null = 即时授权成功（之前已授权过）
+    )
+
+    /**
      * 请求眼镜授权
      *
      * 拉起 Rokid AI App 授权界面，用户确认后返回 token。
-     * 需要在 Activity.onActivityResult 中调用 parseAuthResult 处理结果。
+     * 如果之前已授权过，SDK 可能直接返回即时结果（无需用户操作）。
      *
      * @param activity 当前 Activity
-     * @return true 如果请求成功发起
+     * @return AuthRequestResult
      */
-    fun requestAuthorization(activity: Activity): Boolean {
+    fun requestAuthorization(activity: Activity): AuthRequestResult {
         if (!isRokidAppInstalled(activity)) {
             Log.e(TAG, "Rokid AI App not installed")
-            return false
+            return AuthRequestResult(started = false, immediateToken = null)
         }
 
         val permissions = arrayOf(
@@ -73,8 +113,26 @@ object RokidCxrHelper {
         val result: AndroidPair<Int, Intent>? = AuthorizationHelper
             .requestAuthorization(activity, permissions, REQUEST_AUTH)
 
-        Log.i(TAG, "requestAuthorization result: ${result?.first}")
-        return result != null
+        Log.i(TAG, "requestAuthorization result: ${result?.first}, hasIntent=${result?.second != null}")
+
+        if (result == null) {
+            Log.e(TAG, "requestAuthorization returned null")
+            return AuthRequestResult(started = false, immediateToken = null)
+        }
+
+        // 检查是否是即时授权结果（之前已授权过，SDK 直接返回 token）
+        // result.first == RESULT_OK (-1) 表示即时成功
+        if (result.first == Activity.RESULT_OK && result.second != null) {
+            val token = parseAuthResult(result.first, result.second)
+            if (token != null) {
+                Log.i(TAG, "Immediate auth success (previously authorized), token length: ${token.length}")
+                return AuthRequestResult(started = false, immediateToken = token)
+            }
+        }
+
+        // 授权 Activity 已启动，等待 onActivityResult
+        Log.i(TAG, "Authorization activity launched, waiting for onActivityResult...")
+        return AuthRequestResult(started = true, immediateToken = null)
     }
 
     /**
@@ -149,14 +207,26 @@ object RokidCxrHelper {
 
             override fun onGlassAiAssistStart() {
                 Log.i(TAG, "onGlassAiAssistStart")
+                interactionCallback?.onAiAssistStart()
             }
 
             override fun onGlassAiAssistStop() {
                 Log.i(TAG, "onGlassAiAssistStop")
+                interactionCallback?.onAiAssistStop()
             }
 
             override fun onGlassAiInterrupt(interrupted: Boolean) {
                 Log.i(TAG, "onGlassAiInterrupt: $interrupted")
+            }
+        })
+
+        // 设置自定义命令回调 — 接收眼镜端点击/语音命令
+        cxrLink!!.setCXRCustomCmdCbk(object : ICustomCmdCbk {
+            override fun onCustomCmdResult(cmd: String?, data: ByteArray?) {
+                Log.i(TAG, "onCustomCmdResult: cmd=$cmd, dataLen=${data?.size}")
+                if (cmd != null) {
+                    interactionCallback?.onCommand(cmd, data)
+                }
             }
         })
 
@@ -244,13 +314,93 @@ object RokidCxrHelper {
     }
 
     /**
-     * 构建文本显示的 JSON 视图
+     * 构建带交互按钮的 JSON 视图
+     *
+     * 上方显示文本内容，下方显示功能按钮（拍照、模式切换等）。
+     * 按钮点击后眼镜端通过 ICustomCmdCbk.onCustomCmdResult 回传按钮 id。
      */
     private fun buildTextViewJson(text: String): String {
         val escapedText = text.replace("\\", "\\\\")
             .replace("\"", "\\\"")
             .replace("\n", "\\n")
-        return """{"type":"LinearLayout","props":{"id":"main","layout_width":"match_parent","layout_height":"match_parent","orientation":"vertical","gravity":"center_vertical","paddingStart":"12dp","paddingEnd":"12dp","paddingTop":"160dp","paddingBottom":"80dp","backgroundColor":"#FF000000"},"children":[{"type":"TextView","props":{"text":"$escapedText","textSize":"16sp","textStyle":"bold","textColor":"#FFFFFFFF","marginEnd":"8dp"}}]}"""
+        return """{"type":"LinearLayout","props":{"id":"main","layout_width":"match_parent","layout_height":"match_parent","orientation":"vertical","gravity":"center","paddingStart":"24dp","paddingEnd":"24dp","paddingTop":"12dp","paddingBottom":"12dp","backgroundColor":"#FF000000"},"children":[{"type":"TextView","props":{"text":"$escapedText","textSize":"16sp","textStyle":"bold","textColor":"#FFFFFFFF","marginBottom":"12dp"}},{"type":"LinearLayout","props":{"orientation":"horizontal","gravity":"center","layout_width":"match_parent","layout_height":"wrap_content"},"children":[{"type":"Button","props":{"id":"btn_capture","text":"拍照","textSize":"14sp","textColor":"#FFFFFFFF","backgroundColor":"#FF1E88E5","marginEnd":"8dp"}},{"type":"Button","props":{"id":"btn_mode1","text":"障碍物","textSize":"14sp","textColor":"#FFFFFFFF","backgroundColor":"#FF43A047","marginEnd":"8dp"}},{"type":"Button","props":{"id":"btn_mode2","text":"文字","textSize":"14sp","textColor":"#FFFFFFFF","backgroundColor":"#FFFB8C00","marginEnd":"8dp"}},{"type":"Button","props":{"id":"btn_mode3","text":"场景","textSize":"14sp","textColor":"#FFFFFFFF","backgroundColor":"#FFE53935","marginEnd":"8dp"}},{"type":"Button","props":{"id":"btn_guide","text":"引导","textSize":"14sp","textColor":"#FFFFFFFF","backgroundColor":"#FF8E24AA","marginEnd":"8dp"}},{"type":"Button","props":{"id":"btn_continuous","text":"连续","textSize":"14sp","textColor":"#FFFFFFFF","backgroundColor":"#FF00897B"}}]}]}"""
+    }
+
+    // ========== 图标设置（眼镜端导航选择）==========
+
+    /**
+     * 设置功能图标 — 眼镜端可通过触控板滑动选择图标并点击执行
+     *
+     * 图标列表：拍照分析、障碍物检测、文字识别、场景描述、指向引导、连续检测
+     *
+     * @return true 如果设置成功
+     */
+    fun setupFunctionIcons(): Boolean {
+        if (!isConnected) return false
+        val iconsJson = buildIconsJson()
+        val result = cxrLink?.customViewSetIcons(iconsJson) ?: false
+        Log.i(TAG, "setupFunctionIcons result=$result")
+        return result
+    }
+
+    /**
+     * 构建图标 JSON
+     *
+     * 每个图标包含 name（命令标识）和 data（base64 PNG 图片）
+     */
+    private fun buildIconsJson(): String {
+        val icons = listOf(
+            Triple("capture", "拍照", "#1E88E5"),
+            Triple("mode_obstacle", "障碍物", "#43A047"),
+            Triple("mode_text", "文字", "#FB8C00"),
+            Triple("mode_scene", "场景", "#E53935"),
+            Triple("mode_guide", "引导", "#8E24AA"),
+            Triple("continuous", "连续", "#00897B")
+        )
+        val jsonArray = JSONArray()
+        for ((name, label, color) in icons) {
+            val icon = JSONObject()
+            icon.put("name", name)
+            icon.put("data", createIconBase64(label, color))
+            jsonArray.put(icon)
+        }
+        return jsonArray.toString()
+    }
+
+    /**
+     * 生成简单的带文字图标（base64 PNG）
+     */
+    private fun createIconBase64(text: String, bgColor: String): String {
+        val size = 96
+        val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+
+        // 圆角背景
+        val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+        bgPaint.color = Color.parseColor("#FF$bgColor")
+        val radius = 16f
+        canvas.drawRoundRect(
+            0f, 0f, size.toFloat(), size.toFloat(),
+            radius, radius, bgPaint
+        )
+
+        // 文字
+        val textPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+        textPaint.color = Color.WHITE
+        textPaint.textSize = if (text.length <= 2) 32f else 24f
+        textPaint.typeface = Typeface.DEFAULT_BOLD
+        textPaint.textAlign = Paint.Align.CENTER
+
+        val textBounds = Rect()
+        textPaint.getTextBounds(text, 0, text.length, textBounds)
+        val baseline = size / 2f + textBounds.height() / 2f
+        canvas.drawText(text, size / 2f, baseline, textPaint)
+
+        // 转 base64
+        val outputStream = ByteArrayOutputStream()
+        bitmap.compress(Bitmap.CompressFormat.PNG, 100, outputStream)
+        bitmap.recycle()
+        return Base64.encodeToString(outputStream.toByteArray(), Base64.NO_WRAP)
     }
 
     // ========== 设备信息 ==========

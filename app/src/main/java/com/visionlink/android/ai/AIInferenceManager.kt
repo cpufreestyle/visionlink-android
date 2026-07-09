@@ -47,7 +47,7 @@ class AIInferenceManager(private val context: Context) {
         private const val STEPFUN_VISION_MODEL = "step-1v-8k"
         
         // Google AI Edge LiteRT-LM Configuration
-        private const val GEMMA_MODEL_NAME = "gemma-3n-E2B-it-int4"
+        private const val GEMMA_MODEL_NAME = "gemma-4-e2b-it"
         private const val MODEL_DIR = "litert_models"
 
         const val MODEL_TYPE_GEMMA = "gemma4_e2b"
@@ -59,7 +59,7 @@ class AIInferenceManager(private val context: Context) {
         private const val MIN_SDK = 33
     }
 
-    enum class InferenceEngine { NONE, AICORE, EDGE, LITERT_LM, CLOUD, STEPFUN, LM_STUDIO, CUSTOM }
+    enum class InferenceEngine { NONE, AICORE, EDGE, LITERT_LM, CLOUD, STEPFUN, LM_STUDIO, CUSTOM, YOLO }
     enum class InferenceMode { SINGLE_SHOT, CONTINUOUS }
 
     data class ManagerState(
@@ -275,6 +275,25 @@ class AIInferenceManager(private val context: Context) {
             }
         }
 
+        // YOLO 引擎：初始化端侧物体检测器
+        if (currentEngine == InferenceEngine.YOLO) {
+            if (yoloDetector == null) {
+                yoloDetector = YoloDetector(context)
+            }
+            val ok = yoloDetector!!.initialize()
+            if (!ok) {
+                updateState {
+                    copy(
+                        engine = currentEngine,
+                        isInitialized = false,
+                        initError = "YOLO 检测器初始化失败"
+                    )
+                }
+                return@withContext false
+            }
+            Log.i(TAG, "YOLO engine initialized (EfficientDet-Lite0)")
+        }
+
         // 对自定义 API 引擎做连通性检查
         if (currentEngine == InferenceEngine.CUSTOM) {
             val config = customConfig
@@ -361,6 +380,7 @@ class AIInferenceManager(private val context: Context) {
                 InferenceEngine.LM_STUDIO -> runLmStudioInference(prompt, bitmap)
                 InferenceEngine.EDGE -> runEdgeInference(prompt, bitmap)
                 InferenceEngine.CUSTOM -> callCustomAPI(prompt, bitmap)
+                InferenceEngine.YOLO -> runYoloDetection(bitmap, mode)
                 else -> "Unsupported engine: $currentEngine"
             }
 
@@ -742,6 +762,10 @@ class AIInferenceManager(private val context: Context) {
 
     fun release() {
         scope.cancel()
+        yoloDetector?.release()
+        yoloDetector = null
+        litertEngine?.close()
+        litertEngine = null
         currentEngine = InferenceEngine.NONE
         currentMode = InferenceMode.SINGLE_SHOT
         updateState {
@@ -787,11 +811,14 @@ class AIInferenceManager(private val context: Context) {
     // ========== LiteRT-LM Engine Instance ==========
     private var litertEngine: Engine? = null
 
+    // ========== YOLO Object Detector Instance ==========
+    private var yoloDetector: YoloDetector? = null
+
     // ========== Google AI Edge LiteRT-LM Inference ==========
     private suspend fun runEdgeInference(prompt: String, bitmap: Bitmap): String =
         withContext(Dispatchers.IO) {
             try {
-                Log.d(TAG, "Running LiteRT-LM inference with Gemma 3n E2B...")
+                Log.d(TAG, "Running LiteRT-LM inference with Gemma 4 E2B...")
 
                 // 1. Find model file (.litertlm format)
                 val modelDir = File(context.filesDir, MODEL_DIR)
@@ -800,7 +827,7 @@ class AIInferenceManager(private val context: Context) {
                 val modelFile = File(modelDir, "$GEMMA_MODEL_NAME.litertlm")
                 if (!modelFile.exists()) {
                     Log.w(TAG, "LiteRT-LM model not found at ${modelFile.absolutePath}")
-                    return@withContext "错误: 本地模型未下载。请先从 Google AI Edge Gallery 下载 Gemma 3n E2B 模型，或将 .litertlm 文件复制到 ${modelFile.absolutePath}"
+                    return@withContext "错误: 本地模型未下载。请先从 Google AI Edge Gallery 下载 Gemma 4 E2B 模型，或将 .litertlm 文件复制到 ${modelFile.absolutePath}"
                 }
 
                 // 2. Initialize LiteRT-LM Engine
@@ -857,13 +884,61 @@ class AIInferenceManager(private val context: Context) {
             val modelFile = File(modelDir, "$GEMMA_MODEL_NAME.litertlm")
 
             if (!modelFile.exists()) {
-                "⚠️ 模型未找到: ${modelFile.absolutePath}\n请从 Google AI Edge Gallery App 下载 Gemma 3n E2B，或手动复制 .litertlm 文件到该路径"
+                "⚠️ 模型未找到: ${modelFile.absolutePath}\n请从 Google AI Edge Gallery App 下载 Gemma 4 E2B，或手动复制 .litertlm 文件到该路径"
             } else {
                 val sizeMb = modelFile.length() / (1024 * 1024)
                 "✅ 模型已就绪: ${modelFile.name} (${sizeMb}MB)\n路径: ${modelFile.absolutePath}"
             }
         } catch (e: Exception) {
             "❌ 检查失败: ${e.message}"
+        }
+    }
+
+    // ========== YOLO Object Detection ==========
+
+    /**
+     * 使用 YOLO（EfficientDet-Lite0）进行快速端侧物体检测
+     *
+     * 与 Gemma 4 (EDGE) 的区别：
+     * - 速度：~30ms/帧 vs ~2s/帧
+     * - 输出：物体标签+位置 vs 自然语言描述
+     * - 网络：完全离线 vs 完全离线（但需模型文件）
+     *
+     * @param bitmap 输入图像
+     * @param mode 检测模式: 1=障碍物, 2=文字(不支持), 3=场景描述
+     */
+    private suspend fun runYoloDetection(bitmap: Bitmap, mode: Int): String =
+        withContext(Dispatchers.IO) {
+            try {
+                val detector = yoloDetector
+                if (detector == null || !detector.isReady()) {
+                    return@withContext "错误: YOLO 检测器未初始化"
+                }
+                val result = detector.analyzeForMode(bitmap, mode)
+                Log.d(TAG, "YOLO result: ${result.take(80)}")
+                result
+            } catch (e: Exception) {
+                Log.e(TAG, "YOLO detection failed: ${e.message}", e)
+                "错误: YOLO 检测失败 - ${e.message}"
+            }
+        }
+
+    /**
+     * 测试 YOLO 检测器是否可用
+     */
+    suspend fun testYoloConnection(): String = withContext(Dispatchers.IO) {
+        try {
+            if (yoloDetector == null) {
+                yoloDetector = YoloDetector(context)
+            }
+            val ok = yoloDetector!!.initialize()
+            if (ok) {
+                "✅ YOLO 检测器就绪 (EfficientDet-Lite0, COCO 80类)\n模型: mediapipe/efficientdet_lite0.tflite\n完全离线推理，约30ms/帧"
+            } else {
+                "❌ YOLO 检测器初始化失败"
+            }
+        } catch (e: Exception) {
+            "❌ YOLO 检测失败: ${e.message}"
         }
     }
 }

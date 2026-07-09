@@ -11,6 +11,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeoutOrNull
+import com.visionlink.android.glasses.RokidCxrHelper.AuthRequestResult
 
 /**
  * Rokid CXR-L 眼镜管理器
@@ -40,6 +41,10 @@ class CXRGlassesManager(private val context: Context) {
         private set
 
     var errorMessage: String = ""
+        private set
+
+    /** 眼镜交互回调（命令点击、语音助手） */
+    var interactionCallback: GlassesInteractionCallback? = null
         private set
 
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
@@ -97,12 +102,14 @@ class CXRGlassesManager(private val context: Context) {
      * 请求授权并连接眼镜
      *
      * 必须从 Activity 调用，会拉起 Rokid AI App 授权界面。
+     * 如果之前已授权过，SDK 可能直接返回 token，无需用户操作。
      * 授权结果在 Activity.onActivityResult 中处理，调用 handleAuthResult()。
      *
      * @param activity 当前 Activity
-     * @return true 如果成功发起授权请求
+     * @param onImmediateConnect 如果即时授权成功，通过此回调通知（在 IO 线程）
+     * @return true 如果成功发起授权请求或已获得即时 token
      */
-    fun requestAuthAndConnect(activity: Activity): Boolean {
+    fun requestAuthAndConnect(activity: Activity, onImmediateConnect: ((Boolean) -> Unit)? = null): Boolean {
         if (!RokidCxrHelper.isRokidAppInstalled(activity)) {
             errorMessage = "Rokid AI App 未安装，请先安装 Rokid AI App"
             connectionState = ConnectionState.ERROR
@@ -112,13 +119,66 @@ class CXRGlassesManager(private val context: Context) {
 
         connectionState = ConnectionState.AUTHENTICATING
         Log.i(TAG, "Requesting Rokid AI App authorization...")
-        val started = RokidCxrHelper.requestAuthorization(activity)
-        if (!started) {
+        val authResult = RokidCxrHelper.requestAuthorization(activity)
+
+        if (authResult.immediateToken != null) {
+            // 即时授权成功（之前已授权过），直接连接
+            Log.i(TAG, "Immediate auth success, connecting to glasses directly...")
+            connectionState = ConnectionState.CONNECTING
+            connectWithToken(activity, authResult.immediateToken, onImmediateConnect)
+            return true
+        }
+
+        if (!authResult.started) {
             connectionState = ConnectionState.ERROR
             errorMessage = "无法启动授权流程"
             Log.e(TAG, errorMessage)
+            return false
         }
-        return started
+
+        // 授权 Activity 已启动，等待 onActivityResult
+        return true
+    }
+
+    /**
+     * 使用 token 直接连接眼镜（带超时保护）
+     */
+    private fun connectWithToken(context: Context, token: String, callback: ((Boolean) -> Unit)?) {
+        scope.launch {
+            var callbackCalled = false
+            val connectTimeoutMs = 30_000L  // 缩短到 30 秒
+
+            // 超时保护
+            val timeoutJob = launch {
+                delay(connectTimeoutMs)
+                if (!callbackCalled) {
+                    callbackCalled = true
+                    Log.e(TAG, "Glasses connect timed out after ${connectTimeoutMs}ms")
+                    connectionState = ConnectionState.ERROR
+                    errorMessage = "眼镜连接超时，请确保眼镜已开机并配对"
+                    CrashReporter.reportError("GlassesConnect", "Glasses connect timed out after ${connectTimeoutMs}ms")
+                    callback?.invoke(false)
+                }
+            }
+
+            // 实际连接
+            RokidCxrHelper.connect(context, token) { connected ->
+                if (!callbackCalled) {
+                    callbackCalled = true
+                    timeoutJob.cancel()
+                    if (connected) {
+                        connectionState = ConnectionState.CONNECTED
+                        errorMessage = ""
+                        Log.i(TAG, "Glasses connected: ${RokidCxrHelper.getDeviceName()}")
+                    } else {
+                        connectionState = ConnectionState.ERROR
+                        errorMessage = "眼镜连接失败"
+                        Log.e(TAG, "Glasses connect failed")
+                    }
+                    callback?.invoke(connected)
+                }
+            }
+        }
     }
 
     /**
@@ -141,10 +201,9 @@ class CXRGlassesManager(private val context: Context) {
      * @param callback 连接结果回调
      */
     fun handleAuthResult(resultCode: Int, data: android.content.Intent?, callback: (Boolean) -> Unit) {
-        // 如果状态已经不是 AUTHENTICATING，说明可能已被超时重置
+        // 如果状态已经不是 AUTHENTICATING，说明可能已被超时重置或已通过即时授权连接
         if (connectionState != ConnectionState.AUTHENTICATING) {
             Log.w(TAG, "handleAuthResult called but state=$connectionState, ignoring")
-            // 仍然回调 false，避免 UI 卡死
             callback(false)
             return
         }
@@ -159,42 +218,29 @@ class CXRGlassesManager(private val context: Context) {
 
         connectionState = ConnectionState.CONNECTING
         Log.i(TAG, "Auth success, connecting to glasses...")
+        connectWithToken(context, token, callback)
+    }
 
-        // 连接带超时，避免 onCXRLConnected 回调永不触发
-        scope.launch {
-            var callbackCalled = false
-            val connectTimeoutMs = 60_000L
+    // ========== 交互设置 ==========
 
-            // 超时保护
-            val timeoutJob = launch {
-                delay(connectTimeoutMs)
-                if (!callbackCalled) {
-                    callbackCalled = true
-                    Log.e(TAG, "Glasses connect timed out after ${connectTimeoutMs}ms")
-                    connectionState = ConnectionState.ERROR
-                    errorMessage = "眼镜连接超时，请确保眼镜已开机并配对"
-                    CrashReporter.reportError("GlassesConnect", "Glasses connect timed out after ${connectTimeoutMs}ms")
-                    callback(false)
-                }
-            }
+    /**
+     * 设置眼镜交互回调 — 接收眼镜端的点击命令和语音助手事件
+     */
+    fun setInteractionCallback(callback: GlassesInteractionCallback) {
+        interactionCallback = callback
+        RokidCxrHelper.setInteractionCallback(callback)
+    }
 
-            // 实际连接
-            RokidCxrHelper.connect(context, token) { connected ->
-                if (!callbackCalled) {
-                    callbackCalled = true
-                    timeoutJob.cancel()
-                    if (connected) {
-                        connectionState = ConnectionState.CONNECTED
-                        errorMessage = ""
-                        Log.i(TAG, "Glasses connected: ${RokidCxrHelper.getDeviceName()}")
-                    } else {
-                        connectionState = ConnectionState.ERROR
-                        errorMessage = "眼镜连接失败"
-                        Log.e(TAG, "Glasses connect failed")
-                    }
-                    callback(connected)
-                }
-            }
+    /**
+     * 在眼镜 HUD 上设置功能图标
+     * 用户可通过触控板滑动选择图标并点击执行对应功能
+     */
+    fun setupFunctionIcons() {
+        if (!isConnected) return
+        try {
+            RokidCxrHelper.setupFunctionIcons()
+        } catch (e: Exception) {
+            Log.e(TAG, "setupFunctionIcons failed: ${e.message}")
         }
     }
 
@@ -211,6 +257,8 @@ class CXRGlassesManager(private val context: Context) {
         if (text.isBlank()) return
         try {
             RokidCxrHelper.showText(text)
+            // 确保功能图标可用（幂等操作）
+            RokidCxrHelper.setupFunctionIcons()
             Log.d(TAG, "HUD: $text")
         } catch (e: Exception) {
             Log.e(TAG, "sendText failed: ${e.message}")
@@ -251,6 +299,8 @@ class CXRGlassesManager(private val context: Context) {
             else -> "未知"
         }
         sendText("$modeText\n$status")
+        // 同时设置功能图标，确保交互可用
+        setupFunctionIcons()
     }
 
     fun showResult(result: String) {

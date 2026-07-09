@@ -11,8 +11,8 @@ android {
         applicationId = "com.visionlink.android"
         minSdk = 31
         targetSdk = 35
-        versionCode = 53
-        versionName = "5.3.0"
+        versionCode = 57
+        versionName = "5.7.0"
 
         multiDexEnabled = true
 
@@ -83,6 +83,9 @@ android {
             excludes += "/META-INF/DEPENDENCIES"
             excludes += "/META-INF/LICENSE"
             excludes += "/META-INF/NOTICE"
+        }
+        jniLibs {
+            useLegacyPackaging = false
         }
     }
 }

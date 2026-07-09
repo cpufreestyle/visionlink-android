@@ -27,6 +27,7 @@ import com.visionlink.android.camera.CameraManager
 import com.visionlink.android.databinding.ActivityMainBinding
 import com.visionlink.android.R
 import com.visionlink.android.glasses.CXRGlassesManager
+import com.visionlink.android.glasses.GlassesInteractionCallback
 import com.visionlink.android.audio.TTSManager
 import com.visionlink.android.audio.VoiceCommandManager
 import com.visionlink.android.bluetooth.BleRingManager
@@ -97,7 +98,7 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        Log.d(TAG, "VisionLink Android v5.3.0 started")
+        Log.d(TAG, "VisionLink Android v5.7.0 started")
         Log.d(TAG, "Device: ${Build.MANUFACTURER} ${Build.MODEL} (Android ${Build.VERSION.RELEASE})")
 
         // Enable edge-to-edge, handle system bar insets
@@ -165,7 +166,87 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        // 设置眼镜交互回调 — 接收眼镜端点击命令和语音助手事件
+        setupGlassesInteraction()
+
         Log.d(TAG, "All managers initialized (voicePrint: ${voicePrintManager.isReady()})")
+    }
+
+    /**
+     * 设置眼镜交互回调
+     *
+     * 处理来自眼镜端的三类事件：
+     * 1. 命令点击 — 用户在眼镜上点击按钮/图标，cmd 为按钮 id 或图标 name
+     * 2. AI 助手启动 — 用户按了眼镜 AI 键，触发手机端语音识别
+     * 3. AI 助手停止 — 语音助手结束
+     */
+    private fun setupGlassesInteraction() {
+        glassesManager.setInteractionCallback(object : GlassesInteractionCallback {
+            override fun onCommand(cmd: String, data: ByteArray?) {
+                Log.i(TAG, "Glasses command: $cmd")
+                runOnUiThread { handleGlassesCommand(cmd) }
+            }
+
+            override fun onAiAssistStart() {
+                Log.i(TAG, "Glasses AI assist start")
+                runOnUiThread {
+                    // 眼镜 AI 键按下，启动手机端语音识别
+                    if (!isVoiceEnabled) {
+                        isVoiceEnabled = true
+                        val prefs = getSharedPreferences("visionlink", Context.MODE_PRIVATE)
+                        prefs.edit().putBoolean("isVoiceEnabled", true).apply()
+                        voiceManager.startListening()
+                        binding.tvStatus.text = getString(com.visionlink.android.R.string.voice_listening)
+                    }
+                    speakSafely(if (isEnglish) "Voice command ready" else "语音助手已启动，请说话")
+                }
+            }
+
+            override fun onAiAssistStop() {
+                Log.i(TAG, "Glasses AI assist stop")
+            }
+        })
+    }
+
+    /**
+     * 处理眼镜端命令
+     *
+     * 支持的命令：
+     * - btn_capture / capture      → 拍照分析
+     * - btn_mode1 / mode_obstacle  → 障碍物检测模式
+     * - btn_mode2 / mode_text      → 文字识别模式
+     * - btn_mode3 / mode_scene     → 场景描述模式
+     * - btn_guide / mode_guide     → 指向引导模式
+     * - btn_continuous / continuous→ 连续检测模式
+     */
+    private fun handleGlassesCommand(cmd: String) {
+        when (cmd) {
+            "btn_capture", "capture" -> {
+                speakSafely("正在拍照分析")
+                captureAndAnalyze()
+            }
+            "btn_mode1", "mode_obstacle" -> {
+                setMode(1)
+                speakSafely("障碍物检测模式")
+            }
+            "btn_mode2", "mode_text" -> {
+                setMode(2)
+                speakSafely("文字识别模式")
+            }
+            "btn_mode3", "mode_scene" -> {
+                setMode(3)
+                speakSafely("场景描述模式")
+            }
+            "btn_guide", "mode_guide" -> {
+                if (!isGuideMode) startGuideMode()
+            }
+            "btn_continuous", "continuous" -> {
+                if (!isContinuousMode) toggleContinuousMode()
+            }
+            else -> {
+                Log.w(TAG, "Unknown glasses command: $cmd")
+            }
+        }
     }
 
     private fun setupUI() {
@@ -188,14 +269,90 @@ class MainActivity : AppCompatActivity() {
         binding.btnTestApi.setOnClickListener { testApi() }
         binding.btnTestLm.setOnClickListener { testLmStudio() }
         binding.btnTestEdge.setOnClickListener { testEdge() }
+        binding.btnSwitchEngine.setOnClickListener { switchEngine() }
         binding.btnVoicePrint.setOnClickListener { openVoicePrintDialog() }
         binding.btnExit.setOnClickListener { finish() }
 
         updateModeUI()
+        updateEngineButton()
         binding.tvAiStatus.text = getString(com.visionlink.android.R.string.tap_init_ai_to_start)
         binding.tvAiStatus.visibility = android.view.View.VISIBLE
         binding.tvFps.text = "FPS: 0"
         binding.tvFps.visibility = android.view.View.VISIBLE
+    }
+
+    /**
+     * 切换 AI 引擎：YOLO → Gemma4 → API → YOLO 循环
+     *
+     * - YOLO: 快速物体检测（~30ms/帧），离线，COCO 80类
+     * - Gemma4: 端侧 LLM（~2s/帧），离线，自然语言描述
+     * - API (StepFun): 云端视觉模型，需要网络
+     */
+    private fun switchEngine() {
+        val currentEngine = aiManager.getEngine()
+        val nextEngine = when (currentEngine) {
+            AIInferenceManager.InferenceEngine.YOLO -> AIInferenceManager.InferenceEngine.EDGE
+            AIInferenceManager.InferenceEngine.EDGE -> AIInferenceManager.InferenceEngine.STEPFUN
+            AIInferenceManager.InferenceEngine.STEPFUN -> AIInferenceManager.InferenceEngine.YOLO
+            else -> AIInferenceManager.InferenceEngine.YOLO
+        }
+
+        aiManager.setEngine(nextEngine)
+        updateEngineButton()
+
+        val engineName = when (nextEngine) {
+            AIInferenceManager.InferenceEngine.YOLO -> "YOLO 物体检测（快速离线）"
+            AIInferenceManager.InferenceEngine.EDGE -> "Gemma 4 端侧大模型（离线）"
+            AIInferenceManager.InferenceEngine.STEPFUN -> "StepFun API（云端）"
+            else -> nextEngine.name
+        }
+        speakSafely("已切换到 $engineName")
+        Toast.makeText(this, engineName, Toast.LENGTH_SHORT).show()
+
+        // 切换引擎后需要重新初始化
+        if (nextEngine == AIInferenceManager.InferenceEngine.YOLO) {
+            // YOLO 可直接初始化（模型内置在 assets）
+            scope.launch {
+                aiManager.initialize()
+                runOnUiThread { binding.tvAiStatus.text = "YOLO Ready" }
+            }
+        } else if (nextEngine == AIInferenceManager.InferenceEngine.EDGE) {
+            // Gemma 4 需要模型文件
+            scope.launch {
+                val testResult = aiManager.testEdgeConnection()
+                if (testResult.startsWith("✅")) {
+                    aiManager.initialize()
+                    runOnUiThread { binding.tvAiStatus.text = "Gemma 4 Ready" }
+                } else {
+                    runOnUiThread {
+                        binding.tvAiStatus.text = testResult
+                        speakSafely("Gemma 4 模型未下载")
+                    }
+                }
+            }
+        } else if (nextEngine == AIInferenceManager.InferenceEngine.STEPFUN) {
+            // API 需要网络
+            scope.launch {
+                aiManager.initialize()
+                runOnUiThread { binding.tvAiStatus.text = "API Ready" }
+            }
+        }
+    }
+
+    /**
+     * 更新引擎切换按钮文本
+     */
+    private fun updateEngineButton() {
+        val engine = aiManager.getEngine()
+        val text = when (engine) {
+            AIInferenceManager.InferenceEngine.YOLO -> "引擎: YOLO"
+            AIInferenceManager.InferenceEngine.EDGE -> "引擎: Gemma4"
+            AIInferenceManager.InferenceEngine.STEPFUN -> "引擎: API"
+            AIInferenceManager.InferenceEngine.LM_STUDIO -> "引擎: LM Studio"
+            AIInferenceManager.InferenceEngine.CUSTOM -> "引擎: ${aiManager.getCustomConfig()?.name ?: "Custom"}"
+            else -> "引擎: ${engine.name}"
+        }
+        binding.btnSwitchEngine.text = text
     }
 
     private fun observeAIState() {
@@ -211,9 +368,11 @@ class MainActivity : AppCompatActivity() {
                     AIInferenceManager.InferenceEngine.STEPFUN  -> "StepFun API (阶跃星辰)"
                     AIInferenceManager.InferenceEngine.LM_STUDIO -> "LM Studio (Local)"
                     AIInferenceManager.InferenceEngine.CUSTOM   -> aiManager.getCustomConfig()?.let { "${it.name} (Custom)" } ?: "Custom API"
+                    AIInferenceManager.InferenceEngine.YOLO      -> "YOLO (Object Detection)"
                     AIInferenceManager.InferenceEngine.NONE      -> "Not selected"
                 }
                 binding.tvAiStatus.text = "Engine: $engineText"
+                updateEngineButton()
 
                 if (state.currentFps > 0) binding.tvFps.text = "FPS: ${state.currentFps}"
                 if (state.downloadProgress in 1..99) binding.tvAiStatus.text = if (isEnglish) "Downloading: ${state.downloadProgress}%" else "\u4e0b\u8f7d\u4e2d: ${state.downloadProgress}%"
@@ -223,7 +382,9 @@ class MainActivity : AppCompatActivity() {
                     binding.btnInitAI.text = "AI Ready"
                     binding.btnInitAI.isEnabled = false
                     binding.tvResult.text = getString(com.visionlink.android.R.string.ai_model_ready)
-                    speakSafely("AI initialized with $engineText")
+                    if (state.engine != AIInferenceManager.InferenceEngine.YOLO) {
+                        speakSafely("AI initialized with $engineText")
+                    }
                 }
 
                 if (state.initError != null) binding.tvAiStatus.text = "Error: ${state.initError}"
@@ -678,11 +839,13 @@ class MainActivity : AppCompatActivity() {
                 "mode1", "obstacle" -> setMode(1)
                 "mode2", "text" -> setMode(2)
                 "mode3", "scene" -> setMode(3)
-                "mode4", "guide" -> setMode(4)
+                "mode4", "guide" -> toggleGuideMode()
                 "capture" -> captureAndAnalyze()
                 "continuous" -> toggleContinuousMode()
+                "test_api", "api" -> testApi()
                 "test_lm", "lm" -> testLmStudio()
                 "test_edge", "edge" -> testEdge()
+                "switch_engine", "engine" -> switchEngine()
                 "settings" -> openSettings()
                 "voiceprint" -> openVoicePrintDialog()
                 "exit" -> finish()
@@ -777,6 +940,7 @@ class MainActivity : AppCompatActivity() {
         val dialog = ModelApiConfigDialog(this, modelApiConfigManager) { config ->
             aiManager.setCustomConfig(config)
             binding.tvAiStatus.text = "Engine: ${config.name} (Custom API)"
+        updateEngineButton()
             binding.tvAiStatus.visibility = android.view.View.VISIBLE
             speakSafely("已切换到模型 ${config.name}")
             Log.i(TAG, "Switched to custom API: ${config.name}")
@@ -1170,6 +1334,8 @@ class MainActivity : AppCompatActivity() {
                     }
                     binding.tvGlassesStatus.setTextColor(0xFF00FF00.toInt())
                     speakSafely(if (isEnglish) "Glasses connected" else "眼镜已连接")
+                    // 设置功能图标，启用眼镜端交互
+                    glassesManager.setupFunctionIcons()
                 } else {
                     binding.tvGlassesStatus.text = getString(com.visionlink.android.R.string.glasses_disconnected)
                     binding.tvGlassesStatus.setTextColor(0xFFFF0000.toInt())
@@ -1187,26 +1353,49 @@ class MainActivity : AppCompatActivity() {
             return
         }
         binding.tvGlassesStatus.text = if (isEnglish) "Authenticating..." else "正在授权..."
+        binding.tvGlassesStatus.setTextColor(0xFFFFFF00.toInt())
         speakSafely(if (isEnglish) "Connecting glasses" else "正在连接眼镜")
-        val started = glassesManager.requestAuthAndConnect(this)
+
+        val started = glassesManager.requestAuthAndConnect(this) { connected ->
+            // 即时授权回调（在 IO 线程）
+            runOnUiThread {
+                if (connected) {
+                    binding.tvGlassesStatus.text = if (isEnglish) {
+                        "Glasses: ${glassesManager.getDeviceName()}"
+                    } else {
+                        "眼镜: ${glassesManager.getDeviceName()}"
+                    }
+                    binding.tvGlassesStatus.setTextColor(0xFF00FF00.toInt())
+                    speakSafely(if (isEnglish) "Glasses connected" else "眼镜已连接")
+                    glassesManager.setupFunctionIcons()
+                } else {
+                    val err = glassesManager.errorMessage
+                    binding.tvGlassesStatus.text = if (err.isNotEmpty()) err else getString(com.visionlink.android.R.string.glasses_disconnected)
+                    binding.tvGlassesStatus.setTextColor(0xFFFF0000.toInt())
+                    speakSafely(if (isEnglish) "Glasses connection failed" else "眼镜连接失败")
+                }
+            }
+        }
+
         if (!started) {
             binding.tvGlassesStatus.text = if (isEnglish) "Rokid AI App not installed" else "请先安装 Rokid AI App"
+            binding.tvGlassesStatus.setTextColor(0xFFFF0000.toInt())
             speakSafely(if (isEnglish) "Please install Rokid AI App first" else "请先安装 Rokid AI App")
         } else {
-            // 授权超时保护：如果 120 秒内未收到 onActivityResult，重置状态
+            // 授权超时保护：缩短到 30 秒
             glassesAuthTimeoutJob?.cancel()
             glassesAuthTimeoutJob = scope.launch {
-                delay(120_000)
+                delay(30_000)
                 if (!isDestroyed && !isFinishing &&
                     glassesManager.connectionState == com.visionlink.android.glasses.CXRGlassesManager.ConnectionState.AUTHENTICATING) {
-                    Log.w(TAG, "Authorization timed out after 120s")
+                    Log.w(TAG, "Authorization timed out after 30s")
                     glassesManager.resetAuthState()
                     runOnUiThread {
-                        binding.tvGlassesStatus.text = if (isEnglish) "Auth timeout, retry" else "授权超时，请重试"
+                        binding.tvGlassesStatus.text = if (isEnglish) "Auth timeout, retry" else "授权超时，请重试\n请确保:\n1. 眼镜已开机\n2. 已通过 Rokid AI App 配对\n3. Rokid AI App 版本 >= 1.7.14"
                         binding.tvGlassesStatus.setTextColor(0xFFFF0000.toInt())
-                        speakSafely(if (isEnglish) "Authorization timed out" else "授权超时")
+                        speakSafely(if (isEnglish) "Authorization timed out" else "授权超时，请确保眼镜已开机并配对")
                     }
-                    CrashReporter.reportError("GlassesAuth", "Glasses authorization timed out after 120s")
+                    CrashReporter.reportError("GlassesAuth", "Glasses authorization timed out after 30s")
                 }
             }
         }
@@ -1229,6 +1418,8 @@ class MainActivity : AppCompatActivity() {
                         }
                         binding.tvGlassesStatus.setTextColor(0xFF00FF00.toInt())
                         speakSafely(if (isEnglish) "Glasses connected" else "眼镜已连接")
+                        // 设置功能图标，启用眼镜端交互
+                        glassesManager.setupFunctionIcons()
                     } else {
                         val err = glassesManager.errorMessage
                         binding.tvGlassesStatus.text = if (err.isNotEmpty()) err else getString(com.visionlink.android.R.string.glasses_disconnected)
