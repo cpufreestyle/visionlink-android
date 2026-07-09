@@ -1,8 +1,10 @@
-package com.visionlink.android.ui
+﻿package com.visionlink.android.ui
 
 import android.Manifest
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.os.Build
@@ -51,6 +53,7 @@ class MainActivity : AppCompatActivity() {
         private const val TAG = "MainActivity"
         private const val REQUEST_PERMISSIONS = 1001
         private const val REQUEST_CAMERA_FOR_CAPTURE = 1003
+        private const val ACTION_DEBUG_COMMAND = "com.visionlink.android.DEBUG_COMMAND"
     }
 
     /** 标记：用户点击拍照时相机权限未授予，授权后自动重试 */
@@ -82,6 +85,13 @@ class MainActivity : AppCompatActivity() {
     private var isGuideMode = false
     private var isGuideStarting = false
 
+    private val debugCommandReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            val command = intent?.getStringExtra("command") ?: return
+            handleDebugCommand(command)
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
@@ -99,6 +109,7 @@ class MainActivity : AppCompatActivity() {
 
         initManagers()
         setupUI()
+        setupDebugCommands()
         observeAIState()
         checkPermissions()
 
@@ -467,7 +478,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun testLmStudio() {
         binding.tvAiStatus.text = "Testing LM Studio..."
-        binding.tvResult.text = "Testing LM Studio at 172.16.20.242:1234..."
+        binding.tvResult.text = "Testing local AI proxy at 127.0.0.1:1234..."
         binding.btnTestLm.isEnabled = false
 
         scope.launch {
@@ -647,6 +658,40 @@ class MainActivity : AppCompatActivity() {
             }
         }
         dialog.show()
+    }
+
+    private fun setupDebugCommands() {
+        val filter = IntentFilter(ACTION_DEBUG_COMMAND)
+        ContextCompat.registerReceiver(
+            this,
+            debugCommandReceiver,
+            filter,
+            ContextCompat.RECEIVER_NOT_EXPORTED
+        )
+        Log.d(TAG, "Debug command receiver registered: $ACTION_DEBUG_COMMAND")
+    }
+
+    private fun handleDebugCommand(command: String) {
+        Log.d(TAG, "Debug command received: $command")
+        runOnUiThread {
+            when (command.lowercase()) {
+                "mode1", "obstacle" -> setMode(1)
+                "mode2", "text" -> setMode(2)
+                "mode3", "scene" -> setMode(3)
+                "mode4", "guide" -> setMode(4)
+                "capture" -> captureAndAnalyze()
+                "continuous" -> toggleContinuousMode()
+                "test_lm", "lm" -> testLmStudio()
+                "test_edge", "edge" -> testEdge()
+                "settings" -> openSettings()
+                "voiceprint" -> openVoicePrintDialog()
+                "exit" -> finish()
+                else -> {
+                    binding.tvResult.text = "Unknown debug command: $command"
+                    Toast.makeText(this, "Unknown debug command: $command", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
     }
 
     /**
@@ -1197,6 +1242,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         isDestroyed = true
+        try { unregisterReceiver(debugCommandReceiver) } catch (_: Exception) {}
         try { guideManager?.release() }     catch (_: Exception) {}
         try { aiManager.release() }        catch (_: Exception) {}
         try { cameraManager.release() }     catch (_: Exception) {}
