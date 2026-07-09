@@ -17,6 +17,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.io.PrintWriter
+import com.visionlink.android.BuildConfig
 import java.io.StringWriter
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -61,7 +62,9 @@ class CrashReporter private constructor(
             if (instance != null) return
 
             val prefs = application.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            // 优先使用用户配置的 token，其次使用 BuildConfig 中的内置 token
             val token = prefs.getString(KEY_GITHUB_TOKEN, null)
+                ?: BuildConfig.GITHUB_REPORT_TOKEN.takeIf { it.isNotBlank() }
             val reporter = CrashReporter(application, repo, token)
             instance = reporter
 

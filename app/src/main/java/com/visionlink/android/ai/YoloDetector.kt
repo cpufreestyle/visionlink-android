@@ -5,7 +5,6 @@ import android.graphics.Bitmap
 import android.util.Log
 import com.google.mediapipe.framework.image.BitmapImageBuilder
 import com.google.mediapipe.tasks.core.BaseOptions
-import com.google.mediapipe.tasks.core.Delegate
 import com.google.mediapipe.tasks.vision.core.RunningMode
 import com.google.mediapipe.tasks.vision.objectdetector.ObjectDetector
 import java.util.concurrent.atomic.AtomicBoolean
@@ -59,7 +58,8 @@ class YoloDetector(private val context: Context) {
     /**
      * 初始化检测器（同步，耗时约几百毫秒）
      *
-     * 使用 CPU 代理以确保最大兼容性。GPU 代理在某些设备上会导致初始化失败。
+     * 不显式设置 Delegate，使用 MediaPipe 默认值（CPU）以确保最大兼容性。
+     * 之前尝试显式设置 Delegate.CPU 在某些设备的 release 构建中导致闪退。
      *
      * @return true 如果初始化成功
      */
@@ -79,39 +79,22 @@ class YoloDetector(private val context: Context) {
             return false
         }
 
-        // 尝试 CPU 代理初始化（最大兼容性）
-        val ok = tryInit(Delegate.CPU)
-        if (ok) {
-            Log.w(TAG, "物体检测器初始化完成 (CPU 代理, efficientdet_lite0)")
-            return true
-        }
-
-        // CPU 失败时尝试 GPU 代理
-        Log.w(TAG, "CPU 代理初始化失败，尝试 GPU 代理...")
-        return tryInit(Delegate.GPU)
-    }
-
-    /**
-     * 使用指定代理尝试初始化
-     */
-    private fun tryInit(delegate: Delegate): Boolean {
+        // 初始化检测器（不设置 Delegate，使用默认 CPU）
         return try {
-            val baseOptions = BaseOptions.builder()
-                .setModelAssetPath(MODEL_ASSET)
-                .setDelegate(delegate)
-                .build()
-
             val options = ObjectDetector.ObjectDetectorOptions.builder()
-                .setBaseOptions(baseOptions)
+                .setBaseOptions(
+                    BaseOptions.builder().setModelAssetPath(MODEL_ASSET).build()
+                )
                 .setRunningMode(RunningMode.IMAGE)
                 .setMaxResults(MAX_RESULTS)
                 .setScoreThreshold(MIN_SCORE)
                 .build()
             detector = ObjectDetector.createFromOptions(context, options)
             initialized.set(true)
+            Log.w(TAG, "物体检测器初始化完成 (efficientdet_lite0)")
             true
         } catch (e: Exception) {
-            Log.e(TAG, "初始化失败 ($delegate): ${e.message}", e)
+            Log.e(TAG, "物体检测器初始化失败: ${e.message}", e)
             false
         }
     }
@@ -216,7 +199,7 @@ class YoloDetector(private val context: Context) {
         return (realHeight / (2f * frac * tanHalfVFov)).coerceIn(0.3f, 50f)
     }
 
-    /** 距离描述：有尺寸先验时报“X米”，无先验时退回框高分档 */
+    /** 距离描述：有尺寸先验时报"X米"，无先验时退回框高分档 */
     private fun distancePhrase(det: Detection, meters: Float?): String {
         if (meters != null) {
             val mStr = if (meters < 1.0f) "不到一米" else "${fmtMeters(meters)}米"
@@ -261,7 +244,7 @@ class YoloDetector(private val context: Context) {
         }
     }
 
-    /** 主方向：始终是“前方”（用户面向的方向） */
+    /** 主方向：始终是"前方"（用户面向的方向） */
     private fun mainDirection(centerX: Float): String = when {
         centerX < 0.2f -> "左侧"
         centerX > 0.8f -> "右侧"

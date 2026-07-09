@@ -11,8 +11,8 @@ android {
         applicationId = "com.visionlink.android"
         minSdk = 31
         targetSdk = 35
-        versionCode = 593
-        versionName = "5.9.3"
+        versionCode = 595
+        versionName = "5.9.5"
 
         multiDexEnabled = true
 
@@ -20,6 +20,8 @@ android {
         buildConfigField("String", "STEPFUN_API_KEY", "\"${rootProject.ext["STEPFUN_API_KEY"]}\"")
         buildConfigField("String", "STEPFUN_API_KEY_TEST", "\"${rootProject.ext["STEPFUN_API_KEY_TEST"]}\"")
         buildConfigField("String", "LM_STUDIO_URL", "\"${rootProject.ext["LM_STUDIO_URL"]}\"")
+        // GitHub Token 用于 CrashReporter 自动上传崩溃日志到 GitHub Issues
+        buildConfigField("String", "GITHUB_REPORT_TOKEN", "\"${rootProject.ext["GITHUB_REPORT_TOKEN"]}\"")
     }
 
     signingConfigs {
@@ -85,7 +87,7 @@ android {
             excludes += "/META-INF/NOTICE"
         }
         jniLibs {
-            useLegacyPackaging = false
+            useLegacyPackaging = true
         }
     }
 }

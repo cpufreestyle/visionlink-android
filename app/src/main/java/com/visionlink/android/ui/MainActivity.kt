@@ -1,4 +1,4 @@
-﻿package com.visionlink.android.ui
+package com.visionlink.android.ui
 
 import android.Manifest
 import android.content.BroadcastReceiver
@@ -107,7 +107,7 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        Log.d(TAG, "VisionLink Android v5.9.3 started")
+        Log.d(TAG, "VisionLink Android v5.9.5 started")
         Log.d(TAG, "Device: ${Build.MANUFACTURER} ${Build.MODEL} (Android ${Build.VERSION.RELEASE})")
 
         // Enable edge-to-edge, handle system bar insets

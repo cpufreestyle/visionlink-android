@@ -140,6 +140,18 @@
 -allowaccessmodification
 -repackageclasses ''
 
+# ============ OkHttp / Okio 保护 ============
+
+-keep class okhttp3.** { *; }
+-keep interface okhttp3.** { *; }
+-keep class okio.** { *; }
+-keep interface okio.** { *; }
+-dontwarn okhttp3.**
+-dontwarn okio.**
+-dontwarn org.conscrypt.**
+-dontwarn org.bouncycastle.**
+-dontwarn org.openjsse.**
+
 # ============ 警告抑制 ============
 
 -dontwarn com.google.ai.edge.litertlm.**

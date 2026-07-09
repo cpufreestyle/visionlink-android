@@ -14,6 +14,9 @@ val localProps = java.util.Properties().apply {
 extra["STEPFUN_API_KEY"] = localProps.getProperty("stepfun.api.key", "")
 extra["STEPFUN_API_KEY_TEST"] = localProps.getProperty("stepfun.api.key.test", "")
 
+// GitHub Token 用于 CrashReporter 自动上传崩溃日志
+extra["GITHUB_REPORT_TOKEN"] = System.getenv("GITHUB_TOKEN") ?: localProps.getProperty("github.report.token", "")
+
 val lmStudioUrl: String = localProps.getProperty("lmstudio.url", "http://127.0.0.1:1234/v1/chat/completions")
 extra["LM_STUDIO_URL"] = lmStudioUrl
 

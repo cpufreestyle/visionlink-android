@@ -13,7 +13,11 @@ class VisionLinkApplication : Application() {
 
         // 初始化崩溃日志自动收集和上传
         // 捕获 App 崩溃和关键错误，自动创建 GitHub Issue 上传日志
-        CrashReporter.init(this)
+        try {
+            CrashReporter.init(this)
+        } catch (e: Exception) {
+            Log.e(TAG, "CrashReporter init failed: ${e.message}", e)
+        }
     }
 
     companion object {
