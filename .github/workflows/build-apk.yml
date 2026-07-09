@@ -103,7 +103,7 @@ jobs:
           sed -i '/maven.aliyun.com/d' settings.gradle.kts
           echo "Patched settings.gradle.kts (removed Aliyun mirror)"
 
-      - name: Create local.properties (CI fallback: empty API keys)
+      - name: "Create local.properties (CI fallback: empty API keys)"
         run: |
           cat > local.properties << 'EOF'
           moonshot.api.key=
