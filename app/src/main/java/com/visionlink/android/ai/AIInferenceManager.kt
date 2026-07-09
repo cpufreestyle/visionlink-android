@@ -42,9 +42,9 @@ class AIInferenceManager(private val context: Context) {
         // StepFun API Configuration (阶跃星辰)
         private const val STEPFUN_API_URL = "https://api.stepfun.com/v1/chat/completions"
         private val STEPFUN_API_KEY = BuildConfig.STEPFUN_API_KEY
-        private const val STEPFUN_TEXT_MODEL = "step-1-flash"
+        private const val STEPFUN_TEXT_MODEL = "step-3.5-flash"
         // 图像分析用 vision 模型
-        private const val STEPFUN_VISION_MODEL = "step-1v-8k"
+        private const val STEPFUN_VISION_MODEL = "step-1o-turbo-vision"
         
         // Google AI Edge LiteRT-LM Configuration
         private const val GEMMA_MODEL_NAME = "gemma-4-e2b-it"

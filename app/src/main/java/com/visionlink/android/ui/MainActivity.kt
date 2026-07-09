@@ -98,7 +98,7 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        Log.d(TAG, "VisionLink Android v5.7.0 started")
+        Log.d(TAG, "VisionLink Android v5.8.0 started")
         Log.d(TAG, "Device: ${Build.MANUFACTURER} ${Build.MODEL} (Android ${Build.VERSION.RELEASE})")
 
         // Enable edge-to-edge, handle system bar insets
