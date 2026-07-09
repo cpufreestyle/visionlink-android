@@ -34,7 +34,7 @@
         android:icon="@android:drawable/ic_menu_view"
         android:label="VisionLink"
         android:supportsRtl="true"
-        android:theme="@style/Theme.AppCompat.Light.DarkActionBar"
+        android:theme="@style/Theme.MaterialComponents.Light.DarkActionBar.Bridge"
         android:hardwareAccelerated="true"
         android:largeHeap="true"
         android:extractNativeLibs="true"

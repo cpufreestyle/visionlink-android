@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VisionLink 导盲 App · 项目学习教程</title>
+<style>
+:root{
+  --bg-void:#0a0a0d; --bg-panel:#14131a; --bg-panel-2:#1c1a24; --bg-elevated:#242029;
+  --gold-primary:#d4af37; --gold-bright:#f4d98b; --gold-amber:#c9a227; --gold-deep:#a88422;
+  --gold-line:rgba(212,175,55,0.35); --border-gold:rgba(212,175,55,0.22);
+  --text-primary:#ede8dc; --text-muted:#9a927f; --text-dim:#6b6555;
+  --danger:#c0563a; --ok:#8fae6b;
+  --font-serif:"Noto Serif SC","Source Han Serif SC",Georgia,serif;
+  --font-mono:"JetBrains Mono","Space Mono","Consolas",monospace;
+  --font-sans:"Noto Sans SC","Source Han Sans SC",system-ui,sans-serif;
+  --radius:4px; --radius-md:8px;
+  --glow-gold:0 0 20px rgba(212,175,55,0.12);
+  --glow-gold-strong:0 0 28px rgba(212,175,55,0.22);
+  --shadow-panel:0 8px 32px rgba(0,0,0,0.5);
+  --ease:cubic-bezier(0.22,0.68,0.35,1);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{
+  background:var(--bg-void); color:var(--text-primary);
+  font-family:var(--font-sans); line-height:1.85;
+  font-size:16px; overflow-x:hidden;
+  background-image:radial-gradient(ellipse 60% 40% at 50% 0%,rgba(212,175,55,0.06),transparent 70%);
+}
+.wrap{max-width:1000px;margin:0 auto;padding:0 24px}
+
+/* ===== 顶栏 ===== */
+.topbar{position:sticky;top:0;z-index:100;background:rgba(10,10,13,0.9);
+  backdrop-filter:blur(12px);border-bottom:1px solid var(--border-gold)}
+.topbar .wrap{display:flex;align-items:center;justify-content:space-between;height:56px}
+.topbar .brand{font-family:var(--font-mono);font-size:13px;letter-spacing:0.14em;
+  text-transform:uppercase;color:var(--gold-primary)}
+.topbar .brand b{color:var(--gold-bright)}
+.topbar nav{display:flex;gap:18px;font-size:13px;font-family:var(--font-mono)}
+.topbar nav a{color:var(--text-muted);text-decoration:none;transition:color .3s}
+.topbar nav a:hover{color:var(--gold-bright)}
+@media(max-width:720px){.topbar nav{display:none}}
+
+/* ===== 封面 ===== */
+.cover{padding:100px 0 80px;position:relative;border-bottom:1px solid var(--border-gold)}
+.cover .eyebrow{font-family:var(--font-mono);font-size:12px;letter-spacing:0.22em;
+  text-transform:uppercase;color:var(--gold-amber);margin-bottom:24px}
+.cover h1{font-family:var(--font-serif);font-weight:600;font-size:52px;line-height:1.15;
+  margin-bottom:8px;
+  background:linear-gradient(135deg,#f4d98b,#d4af37,#a88422);
+  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.cover .sub-en{font-family:var(--font-mono);font-size:15px;letter-spacing:0.1em;
+  color:var(--text-muted);margin-bottom:32px}
+.cover .lead{font-size:18px;color:var(--text-primary);max-width:640px;margin-bottom:40px}
+.cover .meta{display:flex;flex-wrap:wrap;gap:28px;font-family:var(--font-mono);font-size:13px}
+.cover .meta .k{color:var(--text-dim);text-transform:uppercase;letter-spacing:0.1em;font-size:11px}
+.cover .meta .v{color:var(--gold-primary);margin-top:2px}
+@media(max-width:720px){.cover h1{font-size:36px}}
+
+/* ===== 章节 ===== */
+section.chapter{padding:64px 0;border-bottom:1px solid rgba(212,175,55,0.1)}
+.ch-num{font-family:var(--font-mono);font-size:13px;color:var(--gold-deep);
+  letter-spacing:0.14em;margin-bottom:12px}
+h2{font-family:var(--font-serif);font-weight:600;font-size:34px;margin-bottom:8px;color:var(--gold-bright)}
+h2 .en{display:block;font-family:var(--font-mono);font-size:12px;letter-spacing:0.16em;
+  text-transform:uppercase;color:var(--text-dim);font-weight:400;margin-top:6px}
+h3{font-family:var(--font-serif);font-size:22px;margin:36px 0 14px;color:var(--gold-primary);
+  padding-left:14px;border-left:3px solid var(--gold-primary)}
+h4{font-size:17px;margin:24px 0 10px;color:var(--gold-bright)}
+p{margin:14px 0;color:var(--text-primary)}
+p.muted{color:var(--text-muted)}
+strong{color:var(--gold-bright);font-weight:600}
+em{color:var(--gold-primary);font-style:italic}
+a.inline{color:var(--gold-primary)}
+ul,ol{margin:14px 0 14px 24px}
+li{margin:8px 0}
+li::marker{color:var(--gold-deep)}
+code{font-family:var(--font-mono);font-size:0.88em;background:var(--bg-panel-2);
+  color:var(--gold-bright);padding:2px 7px;border-radius:3px;border:1px solid var(--border-gold)}
+
+/* ===== 代码块 ===== */
+pre{background:#0d0c12;border:1px solid var(--border-gold);border-radius:var(--radius-md);
+  padding:20px;overflow-x:auto;margin:20px 0;box-shadow:inset 0 0 30px rgba(0,0,0,0.4)}
+pre code{background:none;border:none;padding:0;color:#d8d2c4;font-size:13.5px;line-height:1.7;display:block}
+pre .cm{color:var(--text-dim)}       /* 注释 */
+pre .kw{color:#c98bd4}                /* 关键字 */
+pre .st{color:#8fae6b}               /* 字符串 */
+pre .fn{color:var(--gold-bright)}    /* 函数名 */
+pre .nm{color:#7ab8d4}               /* 数字/常量 */
+.code-label{font-family:var(--font-mono);font-size:11px;letter-spacing:0.1em;
+  text-transform:uppercase;color:var(--gold-deep);margin:20px 0 -12px}
+
+/* ===== 多宝阁卡片 ===== */
+.curio-grid{display:grid;gap:18px;margin:28px 0}
+.curio-grid.c2{grid-template-columns:1fr 1fr}
+.curio-grid.c3{grid-template-columns:1fr 1fr 1fr}
+@media(max-width:720px){.curio-grid.c2,.curio-grid.c3{grid-template-columns:1fr}}
+.curio{background:var(--bg-panel);border:1px solid var(--border-gold);border-radius:var(--radius);
+  padding:20px;transition:all .4s var(--ease)}
+.curio:hover{transform:translateY(-2px);box-shadow:var(--glow-gold);border-color:var(--gold-line)}
+.curio .idx{font-family:var(--font-mono);font-size:12px;color:var(--gold-deep);margin-bottom:8px}
+.curio h4{margin:0 0 8px;color:var(--gold-bright)}
+.curio p{font-size:14px;color:var(--text-muted);margin:6px 0}
+
+/* ===== 表格 ===== */
+.table-wrap{overflow-x:auto;margin:24px 0}
+table{width:100%;border-collapse:collapse;font-size:14px;min-width:520px}
+th{font-family:var(--font-mono);font-size:11px;text-transform:uppercase;letter-spacing:0.08em;
+  text-align:left;padding:12px 14px;color:var(--gold-primary);
+  border-bottom:1px solid var(--gold-line);background:var(--bg-panel)}
+td{padding:11px 14px;border-bottom:1px solid rgba(212,175,55,0.08);color:var(--text-primary);vertical-align:top}
+tr:hover td{background:rgba(212,175,55,0.04)}
+td code{font-size:12px}
+
+/* ===== 提示框 ===== */
+.note{border-left:3px solid var(--gold-primary);background:rgba(212,175,55,0.06);
+  padding:14px 18px;margin:20px 0;border-radius:0 var(--radius) var(--radius) 0}
+.note.warn{border-color:var(--danger);background:rgba(192,86,58,0.08)}
+.note.ok{border-color:var(--ok);background:rgba(143,174,107,0.08)}
+.note .tag{font-family:var(--font-mono);font-size:11px;letter-spacing:0.1em;text-transform:uppercase;
+  color:var(--gold-primary);display:block;margin-bottom:6px}
+.note.warn .tag{color:var(--danger)}
+.note.ok .tag{color:var(--ok)}
+.note p{margin:4px 0;font-size:14.5px}
+
+/* ===== 数据流步骤 ===== */
+.flow{display:flex;flex-direction:column;gap:2px;margin:24px 0;font-family:var(--font-mono);font-size:13.5px}
+.flow .step{background:var(--bg-panel);border:1px solid var(--border-gold);padding:12px 16px;
+  border-radius:var(--radius);display:flex;gap:14px;align-items:flex-start}
+.flow .step .n{color:var(--gold-primary);font-weight:600;flex-shrink:0}
+.flow .step .t{color:var(--text-primary)}
+.flow .arrow{text-align:center;color:var(--gold-deep);font-size:16px;line-height:1}
+
+/* ===== 目录 ===== */
+.toc{background:var(--bg-panel);border:1px solid var(--border-gold);border-radius:var(--radius-md);
+  padding:28px 32px;margin:40px 0}
+.toc h3{border:none;padding:0;margin:0 0 18px;color:var(--gold-bright)}
+.toc ol{margin:0;list-style:none;counter-reset:toc}
+.toc li{counter-increment:toc;margin:10px 0;padding-left:38px;position:relative}
+.toc li::before{content:counter(toc,decimal-leading-zero);position:absolute;left:0;
+  font-family:var(--font-mono);font-size:13px;color:var(--gold-deep)}
+.toc a{color:var(--text-primary);text-decoration:none;transition:color .3s;
+  border-bottom:1px solid transparent}
+.toc a:hover{color:var(--gold-bright);border-color:var(--gold-line)}
+.toc .desc{color:var(--text-dim);font-size:13px;display:block;font-family:var(--font-sans)}
+
+/* ===== 页脚 ===== */
+footer{padding:48px 0 64px;text-align:center;font-family:var(--font-mono);font-size:12px;
+  color:var(--text-dim);letter-spacing:0.08em}
+footer .line{width:60px;height:1px;background:var(--gold-line);margin:0 auto 24px}
+
+/* reveal 动画 */
+.reveal{opacity:0;transform:translateY(20px);transition:opacity .7s var(--ease),transform .7s var(--ease)}
+.reveal.on{opacity:1;transform:none}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="wrap">
+    <div class="brand"><b>VisionLink</b> · 导盲 App 学习教程</div>
+    <nav>
+      <a href="#overview">概览</a>
+      <a href="#arch">架构</a>
+      <a href="#startup">启动</a>
+      <a href="#loop">数据闭环</a>
+      <a href="#edge-ai">端侧AI</a>
+      <a href="#cloud">云端</a>
+      <a href="#issues">问题</a>
+    </nav>
+  </div>
+</div>
+
+<header class="cover">
+  <div class="wrap">
+    <div class="eyebrow">Project Learning Tutorial · Android · Kotlin</div>
+    <h1>VisionLink 导盲 App<br>代码全景学习教程</h1>
+    <div class="sub-en">A Complete Walkthrough of an AI-Powered Assistive App for the Visually Impaired</div>
+    <p class="lead">从一次启动闪退的排查，到手机 · CXR 眼镜 · 蓝牙戒指三端协同的完整链路 —— 用一份教程把这个 AI 导盲项目的每一层代码讲透，供反复研读。</p>
+    <div class="meta">
+      <div><div class="k">版本</div><div class="v">v5.9.6</div></div>
+      <div><div class="k">技术栈</div><div class="v">Kotlin · CameraX · MediaPipe</div></div>
+      <div><div class="k">架构</div><div class="v">God Activity + Manager</div></div>
+      <div><div class="k">代码规模</div><div class="v">~30 Kotlin 文件</div></div>
+      <div><div class="k">日期</div><div class="v">2026-07-09</div></div>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+<div class="toc reveal">
+  <h3>目录 · Contents</h3>
+  <ol>
+    <li><a href="#overview">项目是什么 · 五种模式</a><span class="desc">导盲 App 的目标、三端硬件、五个功能模式</span></li>
+    <li><a href="#arch">整体架构 · God Activity + Manager</a><span class="desc">为什么没有 MVVM，Manager 模式如何组织代码</span></li>
+    <li><a href="#startup">启动流程 · 闪退是怎么修的</a><span class="desc">onCreate 全流程 + MaterialButton 主题崩溃根因</span></li>
+    <li><a href="#loop">核心数据闭环 · 拍照到播报</a><span class="desc">CameraX → AI 推理 → TTS 的一次完整循环</span></li>
+    <li><a href="#edge-ai">端侧 AI · YOLO / 手部 / OCR</a><span class="desc">MediaPipe 目标检测、HandLandmarker、ML Kit</span></li>
+    <li><a href="#interact">三种交互入口 · 触屏/戒指/语音</a><span class="desc">屏幕点击、BLE 戒指、语音命令如何汇聚</span></li>
+    <li><a href="#glasses">眼镜连接 · Rokid CXR-L</a><span class="desc">授权 → 连接 → HUD 显示 → 交互回调</span></li>
+    <li><a href="#cloud">云端推理 · OpenAI 兼容 API</a><span class="desc">base64 图片上传、多模态大模型调用</span></li>
+    <li><a href="#voice">声纹识别 · ECAPA-TDNN</a><span class="desc">ONNX 声纹注册与余弦相似度比对</span></li>
+    <li><a href="#thread">协程与线程模型</a><span class="desc">Main / IO 调度，回调如何切回 UI 线程</span></li>
+    <li><a href="#issues">已知问题 · 待做功能（端云协同）</a><span class="desc">代码里真实存在的坑 + 图2 要实现的架构</span></li>
+  </ol>
+</div>
+
+<!-- ========== 1. 概览 ========== -->
+<section class="chapter reveal" id="overview">
+  <div class="ch-num">01 / OVERVIEW</div>
+  <h2>项目是什么 · 五种模式<span class="en">What VisionLink Does</span></h2>
+
+  <p>VisionLink 是一款<strong>为视障人士打造的 AI 辅助导盲 App</strong>。核心思路很朴素：<em>让手机（乃至智能眼镜）替使用者"看"，再把看到的东西用语音说出来</em>。它把摄像头、端侧 AI 模型、云端大模型、蓝牙戒指、Rokid 智能眼镜五样东西串成一条链路。</p>
+
+  <h3>三端硬件</h3>
+  <div class="curio-grid c3">
+    <div class="curio"><div class="idx">终端 · A</div><h4>Android 手机</h4><p>主控中枢。摄像头采集、AI 推理调度、语音播报、所有逻辑都在这里。即使不接任何外设也能独立工作。</p></div>
+    <div class="curio"><div class="idx">终端 · B</div><h4>Rokid CXR-L 眼镜</h4><p>可选外设。提供第一视角摄像头 + HUD 抬头显示 + 触控板/语音交互，解放双手。</p></div>
+    <div class="curio"><div class="idx">终端 · C</div><h4>BLE 蓝牙戒指</h4><p>可选外设。一个物理按键，单击/双击/长按触发不同操作，盲人不必摸屏幕。</p></div>
+  </div>
+
+  <h3>五种功能模式</h3>
+  <p>App 用一个整型变量 <code>currentMode</code> 表示当前处于哪种模式。前三种是"拍一张分析一次"，模式 4 是实时连续，"连续检测"是叠加在模式之上的开关。</p>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>模式</th><th>名称</th><th>做什么</th><th>用什么引擎</th></tr></thead>
+    <tbody>
+      <tr><td><code>1</code></td><td>障碍物检测</td><td>识别前方障碍物 + 方位 + 距离，提示避让</td><td>端侧 YOLO / 云端大模型</td></tr>
+      <tr><td><code>2</code></td><td>文字识别</td><td>读出画面里的文字（招牌、菜单、说明书）</td><td>ML Kit OCR / 云端</td></tr>
+      <tr><td><code>3</code></td><td>场景描述</td><td>用一段话描述"眼前是什么场景"</td><td>云端多模态大模型</td></tr>
+      <tr><td><code>4</code></td><td>指向引导</td><td>实时检测手指与目标物，语音引导手去够到物体</td><td>端侧 HandLandmarker + 目标检测</td></tr>
+      <tr><td colspan="4" style="color:var(--text-muted)">叠加开关 · 连续检测：让模式 1 每隔几秒自动拍一次，无需反复手动触发</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="note">
+    <span class="tag">学习提示</span>
+    <p>读这个项目最好的顺序是：先理解<strong>一次拍照 → 分析 → 播报</strong>的主循环（第 4 章），它是整个 App 的心跳；其余所有功能（眼镜、戒指、语音、云端）都只是在这条主循环的<em>入口</em>或<em>出口</em>上做文章。</p>
+  </div>
+</section>
+
+<!-- ========== 2. 架构 ========== -->
+<section class="chapter reveal" id="arch">
+  <div class="ch-num">02 / ARCHITECTURE</div>
+  <h2>整体架构 · God Activity + Manager<span class="en">One Big Activity, Many Managers</span></h2>
+
+  <p>这个项目<strong>刻意没有用</strong> MVVM、没有 Fragment、没有依赖注入框架。它选了一种"老派但直接"的结构：<em>一个巨型 Activity 当总指挥，一堆 Manager 各管一摊</em>。对于学习者，这反而是好事——数据流清晰可追，不用在框架的抽象层里绕。</p>
+
+  <h3>MainActivity —— "上帝对象"</h3>
+  <p><code>MainActivity.kt</code>（约 1600+ 行）持有所有 Manager 的引用，负责：初始化、UI 绑定、模式切换、把各个入口的事件路由到主循环。它就是那根把所有零件串起来的轴。</p>
+
+  <div class="code-label">MainActivity 持有的核心 Manager</div>
+<pre><code><span class="kw">class</span> <span class="fn">MainActivity</span> : AppCompatActivity() {
+    <span class="kw">private lateinit var</span> cameraManager: CameraManager      <span class="cm">// 摄像头采集</span>
+    <span class="kw">private lateinit var</span> aiManager: AIInferenceManager     <span class="cm">// AI 推理调度（端/云）</span>
+    <span class="kw">private lateinit var</span> ttsManager: TtsManager             <span class="cm">// 语音播报</span>
+    <span class="kw">private lateinit var</span> speechManager: SpeechManager       <span class="cm">// 语音命令识别</span>
+    <span class="kw">private var</span> glassesManager: CXRGlassesManager? = null    <span class="cm">// Rokid 眼镜（可选）</span>
+    <span class="kw">private var</span> ringManager: BleRingManager? = null          <span class="cm">// 蓝牙戒指（可选）</span>
+    <span class="kw">private var</span> handGuide: HandGuideManager? = null          <span class="cm">// 指向引导（模式4）</span>
+    <span class="kw">private var</span> currentMode: Int = <span class="nm">1</span>                     <span class="cm">// 当前模式 1/2/3/4</span>
+}</code></pre>
+
+  <h3>Manager 分工一览</h3>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>Manager / 类</th><th>职责</th><th>关键依赖</th></tr></thead>
+    <tbody>
+      <tr><td><code>CameraManager</code></td><td>用 CameraX 采集画面，把每一帧变成 Bitmap 回调出去</td><td>CameraX ImageAnalysis</td></tr>
+      <tr><td><code>AIInferenceManager</code></td><td>推理总调度，决定这一帧交给哪个引擎（YOLO/云端）</td><td>YoloDetector · OkHttp</td></tr>
+      <tr><td><code>YoloDetector</code></td><td>端侧目标检测（EfficientDet COCO80）</td><td>MediaPipe Tasks Vision</td></tr>
+      <tr><td><code>HandGuideManager</code></td><td>模式4：手部关键点 + 目标物，算相对方位</td><td>MediaPipe HandLandmarker</td></tr>
+      <tr><td><code>OcrRecognizer</code></td><td>模式2：图片文字识别</td><td>ML Kit Text Recognition</td></tr>
+      <tr><td><code>TtsManager</code></td><td>把结果文本读出来</td><td>Android TextToSpeech</td></tr>
+      <tr><td><code>SpeechManager</code></td><td>把用户说的话转成命令</td><td>Android SpeechRecognizer</td></tr>
+      <tr><td><code>CXRGlassesManager</code></td><td>Rokid 眼镜授权/连接/HUD/交互回调</td><td>Rokid CXR-L SDK</td></tr>
+      <tr><td><code>BleRingManager</code></td><td>扫描/连接戒指，把按键事件回调出去</td><td>BLE GATT</td></tr>
+      <tr><td><code>VoicePrintManager</code></td><td>声纹注册与比对</td><td>ONNX Runtime</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="note ok">
+    <span class="tag">为什么这样设计</span>
+    <p>对一个"设备强相关、逻辑线性"的 App 来说，<strong>每个 Manager 封装一类硬件/能力</strong>，Activity 只做编排，是最容易维护和调试的方式。代价是 Activity 会变得很大（God Activity），但换来的是<em>一眼能看到全貌</em>。</p>
+  </div>
+</section>
+
+<!-- ========== 3. 启动流程 ========== -->
+<section class="chapter reveal" id="startup">
+  <div class="ch-num">03 / STARTUP</div>
+  <h2>启动流程 · 那次闪退是怎么修的<span class="en">onCreate & The Crash We Fixed</span></h2>
+
+  <p>v5.9.5 一启动就闪退。排查过程本身就是一堂课，我先讲<strong>真正的根因</strong>，再讲正常的启动流程。</p>
+
+  <h3>崩溃根因：MaterialButton 撞上非 Material 主题</h3>
+  <p>抓 <code>adb logcat</code> 才看到真相：布局里用了 <code>MaterialButton</code>，但 <code>AndroidManifest.xml</code> 的主题是 <code>Theme.AppCompat.Light.DarkActionBar</code>。<strong>MaterialButton 强制要求宿主主题是 MaterialComponents 系</strong>，否则一 inflate 就抛异常，整个 Activity 起不来。</p>
+
+  <div class="code-label">修复 · AndroidManifest.xml（Bridge 主题：保留 AppCompat 外观，同时支持 Material 组件）</div>
+<pre><code><span class="cm">// 修复前 —— MaterialButton 无法 inflate，启动即崩</span>
+android:theme=<span class="st">"@style/Theme.AppCompat.Light.DarkActionBar"</span>
+
+<span class="cm">// 修复后 —— Bridge 主题两全其美</span>
+android:theme=<span class="st">"@style/Theme.MaterialComponents.Light.DarkActionBar.Bridge"</span></code></pre>
+
+  <div class="note warn">
+    <span class="tag">踩坑复盘</span>
+    <p>我一开始<em>误判</em>成 native .so 库 16KB 页对齐问题，绕了很大一圈。教训：<strong>崩溃排查第一步永远是抓真实 logcat</strong>，而不是凭"最近改了什么"猜。日志一到，根因五秒钟就现形。</p>
+  </div>
+
+  <h3>正常启动：onCreate 全流程</h3>
+  <p>修复的同时，给 <code>onCreate</code> 套了一层<strong>降级不闪退</strong>的保护——任何一步初始化失败都不让整个 App 挂掉，而是记录并继续。</p>
+
+  <div class="code-label">MainActivity.onCreate —— 用 try/catch(Throwable) 兜底</div>
+<pre><code><span class="kw">override fun</span> <span class="fn">onCreate</span>(savedInstanceState: Bundle?) {
+    <span class="kw">super</span>.onCreate(savedInstanceState)
+    setContentView(R.layout.activity_main)
+    <span class="kw">try</span> {
+        initManagers()        <span class="cm">// 1. 实例化所有 Manager</span>
+        setupUI()             <span class="cm">// 2. 绑定按钮/模式切换</span>
+        setupDebugCommands()  <span class="cm">// 3. 调试命令</span>
+        observeAIState()      <span class="cm">// 4. 监听 AI 状态变化</span>
+        checkPermissions()    <span class="cm">// 5. 请求相机/麦克风等权限</span>
+        checkForAppUpdate()   <span class="cm">// 6. 检查 GitHub Release 有无新版</span>
+    } <span class="kw">catch</span> (t: <span class="fn">Throwable</span>) {
+        <span class="cm">// 关键：catch Throwable 而非 Exception</span>
+        <span class="cm">// UnsatisfiedLinkError 是 Error 不是 Exception，catch(Exception) 抓不住</span>
+        Log.e(TAG, <span class="st">"onCreate 初始化失败，进入降级模式"</span>, t)
+        CrashReporter.reportError(<span class="st">"onCreate"</span>, t.message ?: <span class="st">""</span>, t)
+    }
+}</code></pre>
+
+  <div class="note">
+    <span class="tag">Kotlin 细节</span>
+    <p><code>UnsatisfiedLinkError</code>（加载 .so 失败）继承自 <code>Error</code> 而不是 <code>Exception</code>。所以项目里凡是加载 native 模型的地方，<code>catch</code> 全部从 <code>Exception</code> 改成了 <code>Throwable</code>——这是一个新手极易踩、且 IDE 不会警告的陷阱。</p>
+  </div>
+
+  <h3>启动顺序为什么重要</h3>
+  <div class="flow">
+    <div class="step"><span class="n">1</span><span class="t">setContentView —— 先把布局撑起来（这一步崩了就是上面的主题问题）</span></div>
+    <div class="arrow">↓</div>
+    <div class="step"><span class="n">2</span><span class="t">initManagers —— Manager 之间有依赖，被依赖的先建（如 TTS 先于用它的模块）</span></div>
+    <div class="arrow">↓</div>
+    <div class="step"><span class="n">3</span><span class="t">checkPermissions —— 相机权限拿到后，才真正 startCamera；没权限时 UI 仍可用</span></div>
+    <div class="arrow">↓</div>
+    <div class="step"><span class="n">4</span><span class="t">autoInitYolo —— 后台异步加载端侧模型，不阻塞主线程，失败降级到云端</span></div>
+  </div>
+</section>
+
+<!-- ========== 4. 核心数据闭环 ========== -->
+<section class="chapter reveal" id="loop">
+  <div class="ch-num">04 / THE CORE LOOP</div>
+  <h2>核心数据闭环 · 从拍照到播报<span class="en">Camera → Inference → Speech</span></h2>
+
+  <p>这是整个 App 的<strong>心跳</strong>。理解了它，其余全是枝叶。一次完整循环长这样：</p>
+
+  <div class="flow">
+    <div class="step"><span class="n">①</span><span class="t"><b>触发</b> —— 用户点屏幕 / 按戒指 / 说命令，最终都调用 captureAndAnalyze()</span></div>
+    <div class="arrow">↓</div>
+    <div class="step"><span class="n">②</span><span class="t"><b>取帧</b> —— CameraManager 从最新一帧拿到 Bitmap</span></div>
+    <div class="arrow">↓</div>
+    <div class="step"><span class="n">③</span><span class="t"><b>推理</b> —— AIInferenceManager 按当前模式选引擎，产出一段结果文本</span></div>
+    <div class="arrow">↓</div>
+    <div class="step"><span class="n">④</span><span class="t"><b>输出</b> —— TtsManager 读出来 + 眼镜 HUD 显示（如已连接）</span></div>
+  </div>
+
+  <h3>①→② 取一帧画面</h3>
+  <p>CameraX 的 <code>ImageAnalysis</code> 用 <code>STRATEGY_KEEP_ONLY_LATEST</code> 策略——只保留最新一帧，处理不过来就丢旧帧，保证"拍的就是当下"。每帧通过 <code>ImageProxy</code> 回调，转成 Bitmap 后<strong>必须</strong> <code>close()</code> 释放，否则相机会卡死。</p>
+
+  <div class="code-label">CameraManager —— 分析器回调</div>
+<pre><code>imageAnalysis.setAnalyzer(executor) { imageProxy -&gt;
+    <span class="kw">try</span> {
+        <span class="kw">val</span> bitmap = imageProxy.toBitmap()   <span class="cm">// 转 Bitmap</span>
+        latestBitmap = bitmap                <span class="cm">// 缓存"最新一帧"供拍照取用</span>
+        frameCallback?.invoke(bitmap)        <span class="cm">// 连续模式下逐帧回调（模式4用）</span>
+    } <span class="kw">finally</span> {
+        imageProxy.close()                   <span class="cm">// 必须关闭，否则相机管线阻塞</span>
+    }
+}</code></pre>
+
+  <div class="note warn">
+    <span class="tag">真实存在的坑</span>
+    <p><code>toBitmap()</code> 没有传入 <code>rotationDegrees</code> 做旋转矫正。竖屏拿手机时，送进模型的画面可能是<em>躺倒的</em>，直接影响检测准确率。这是待修问题之一（见第 11 章）。</p>
+  </div>
+
+  <h3>③ 按模式选引擎推理</h3>
+  <p>核心调度在 <code>AIInferenceManager</code>。它内部有一个 <code>currentEngine</code>，用 <code>when</code> 分发——注意：<strong>这些引擎是"互斥"的，不是"协同"的</strong>。同一时刻只有一个引擎在跑。</p>
+
+  <div class="code-label">AIInferenceManager —— 障碍物检测的分发</div>
+<pre><code><span class="kw">suspend fun</span> <span class="fn">detectObstacles</span>(bitmap: Bitmap): String {
+    <span class="kw">return when</span> (currentEngine) {
+        Engine.YOLO      -&gt; yoloDetector.detect(bitmap)        <span class="cm">// 端侧，快、免费、离线</span>
+        Engine.STEPFUN   -&gt; runStepFunInference(bitmap, mode)  <span class="cm">// 云端多模态大模型</span>
+        Engine.LM_STUDIO -&gt; runLocalServerInference(bitmap)    <span class="cm">// 局域网自建服务</span>
+        Engine.EDGE      -&gt; edgeModel.infer(bitmap)
+    }
+}</code></pre>
+
+  <div class="note">
+    <span class="tag">这里藏着你要做的功能</span>
+    <p>你的<strong>图2 目标是"端云协同"</strong>：端侧模型先提取信息，再把这些信息<em>喂给</em>云端大模型联合分析。但现在代码是 <code>when</code> 二选一，端和云<strong>永远不会同时出现在一次推理里</strong>。这正是需要改造的关键缺口，第 11 章会详细拆解。</p>
+  </div>
+
+  <h3>④ 输出：语音 + HUD 双通道</h3>
+  <p>结果拿到后，走两条并行的输出通道：手机 TTS 一定播，眼镜 HUD 在已连接时同步显示。</p>
+
+  <div class="code-label">结果回到 UI 线程后的双通道输出</div>
+<pre><code>runOnUiThread {
+    ttsManager.speak(result)                <span class="cm">// 通道 A：手机语音</span>
+    glassesManager?.showResult(result)      <span class="cm">// 通道 B：眼镜 HUD（未连接时内部直接 return）</span>
+}</code></pre>
+
+  <div class="note warn">
+    <span class="tag">待修问题预告</span>
+    <p>TTS 目前用的是默认 <code>QUEUE_ADD</code> 而非 <code>QUEUE_FLUSH</code>——连续检测时多条结果会排队堆积，说完一长串旧的才轮到新的，实时性差。另外"未检测到障碍"这类话术对盲人有<em>误导性安全暗示</em>，也在待改清单里。</p>
+  </div>
+</section>
+
+<!-- ========== 5. 端侧 AI ========== -->
+<section class="chapter reveal" id="edge-ai">
+  <div class="ch-num">05 / EDGE AI</div>
+  <h2>端侧 AI · 在手机上跑的三个模型<span class="en">On-Device Models: YOLO / Hand / OCR</span></h2>
+
+  <p>端侧 AI 的价值：<strong>快、免费、离线、不上传隐私</strong>。项目里有三个跑在手机本地的模型。</p>
+
+  <h3>① YoloDetector —— 目标检测</h3>
+  <p>用 MediaPipe Tasks Vision 的 <code>ObjectDetector</code>，模型是 <strong>EfficientDet-Lite0</strong>，训练自 COCO 数据集（80 类常见物体：人、车、椅子、瓶子……）。它给出每个物体的<em>类别 + 边界框 + 置信度</em>。</p>
+
+  <div class="code-label">从边界框推出"方位"和"距离"</div>
+<pre><code><span class="cm">// 方位：看边界框中心 X 落在画面左/中/右</span>
+<span class="kw">fun</span> <span class="fn">directionPhrase</span>(centerX: Float, width: Int): String {
+    <span class="kw">return when</span> {
+        centerX &lt; width * <span class="nm">0.33</span> -&gt; <span class="st">"左前方"</span>
+        centerX &gt; width * <span class="nm">0.67</span> -&gt; <span class="st">"右前方"</span>
+        <span class="kw">else</span>                    -&gt; <span class="st">"正前方"</span>
+    }
+}
+
+<span class="cm">// 距离：用"假设物体真实高度 1 米"反推 —— 粗略估计</span>
+<span class="kw">fun</span> <span class="fn">estimateDistance</span>(boxHeightPx: Float, imageHeightPx: Int): Float {
+    <span class="kw">val</span> assumedRealHeightM = <span class="nm">1.0f</span>
+    <span class="kw">return</span> assumedRealHeightM * imageHeightPx / boxHeightPx  <span class="cm">// 只是数量级参考</span>
+}</code></pre>
+
+  <div class="note warn">
+    <span class="tag">局限性</span>
+    <p>距离估算<strong>假设所有物体都是 1 米高</strong>，对瓶子、台阶完全不准，只能给"近/远"的数量级感觉。要精确得靠深度传感器或双目——当前是刻意的工程折中。</p>
+  </div>
+
+  <h3>② HandLandmarker —— 手部关键点（模式4的核心）</h3>
+  <p>MediaPipe 的 <code>HandLandmarker</code> 能吐出手上 <strong>21 个关键点</strong>的坐标。项目关心的是 <em>landmark 8 = 食指指尖</em>。模式4"指向引导"就是：同时检测食指指尖和目标物，算出"物体在手指的哪个方向、还差多远"，实时语音引导手去够。</p>
+
+  <div class="code-label">HandGuideManager —— 指尖坐标（landmark 8）</div>
+<pre><code><span class="kw">val</span> indexTip = handLandmarks[<span class="nm">8</span>]   <span class="cm">// 21 点中第 8 个 = 食指指尖</span>
+<span class="kw">val</span> dx = targetX - indexTip.x()
+<span class="kw">val</span> dy = targetY - indexTip.y()
+<span class="cm">// 由 (dx, dy) 生成"向左一点""再往上""快碰到了"等引导语</span></code></pre>
+
+  <div class="note warn">
+    <span class="tag">真实并发坑</span>
+    <p><code>HandGuideManager</code> 的 <code>processFrame()</code> 和 <code>release()</code> 存在<strong>竞态</strong>：一帧还在推理时若触发释放，可能访问已释放的 native handle。已确认，是待修问题。</p>
+  </div>
+
+  <h3>③ OcrRecognizer —— 文字识别（模式2）</h3>
+  <p>用 ML Kit 的 Text Recognition。<strong>但这里有个大问题</strong>：代码注释声称支持中文，实际却用了 <code>TextRecognizerOptions.DEFAULT_OPTIONS</code>——那是<em>拉丁文</em>识别器，<strong>识别不了中文</strong>。</p>
+
+  <div class="code-label">OcrRecognizer —— 注释与实现不符</div>
+<pre><code><span class="cm">// 注释说"支持中文识别"，但……</span>
+<span class="kw">val</span> recognizer = TextRecognition.getClient(
+    TextRecognizerOptions.DEFAULT_OPTIONS   <span class="cm">// ← 这是 latin-only！中文识别为空</span>
+)
+<span class="cm">// 要中文应换成 ChineseTextRecognizerOptions.Builder().build()</span>
+<span class="cm">// 并加依赖 com.google.mlkit:text-recognition-chinese</span></code></pre>
+
+  <div class="note warn">
+    <span class="tag">待修 Bug</span>
+    <p>对一个中文场景的导盲 App，"读不了中文招牌"是硬伤。修法是换成 <code>ChineseTextRecognizerOptions</code> 并加对应依赖；或者干脆把模式2也走云端多模态大模型（顺带能读手写体和艺术字）。</p>
+  </div>
+</section>
+
+<!-- ========== 6. 三种交互入口 ========== -->
+<section class="chapter reveal" id="interact">
+  <div class="ch-num">06 / INTERACTION</div>
+  <h2>三种交互入口 · 殊途同归<span class="en">Touch / Ring / Voice → One Entry</span></h2>
+
+  <p>盲人不方便看屏幕，所以 App 提供三条并行的触发通道，<strong>最终都汇聚到同一个 <code>captureAndAnalyze()</code></strong>。这是很优雅的设计——入口多样，主干唯一。</p>
+
+  <div class="curio-grid c3">
+    <div class="curio"><div class="idx">入口 A</div><h4>触摸屏</h4><p>屏幕大按钮，明眼人协助或低视力用户可用。setupUI() 里绑定 onClick。</p></div>
+    <div class="curio"><div class="idx">入口 B</div><h4>蓝牙戒指</h4><p>物理按键，单击/双击/长按三种手势。盲人首选，无需触屏。</p></div>
+    <div class="curio"><div class="idx">入口 C</div><h4>语音命令</h4><p>说"看看前面""读一下"，SpeechManager 转成命令。</p></div>
+  </div>
+
+  <h3>戒指事件：一个键，三种手势</h3>
+  <p><code>BleRingManager</code> 通过 BLE GATT 收到按键，回调给 Activity 的 <code>handleRingEvent</code>。注意——BLE 回调发生在 <strong>Binder 线程</strong>，操作 UI/相机必须切回主线程，所以每个分支都包在 <code>runOnUiThread</code> 里。</p>
+
+  <div class="code-label">MainActivity.handleRingEvent —— 手势路由（已验证不会崩）</div>
+<pre><code><span class="kw">fun</span> <span class="fn">handleRingEvent</span>(event: RingEvent) = runOnUiThread {
+    <span class="kw">when</span> (event) {
+        RingEvent.SINGLE_CLICK -&gt; captureAndAnalyze()      <span class="cm">// 单击：拍照分析（主干入口）</span>
+        RingEvent.DOUBLE_CLICK -&gt; cycleMode()              <span class="cm">// 双击：切换模式</span>
+        RingEvent.LONG_PRESS   -&gt; toggleContinuousMode()   <span class="cm">// 长按：开/关连续检测</span>
+    }
+}</code></pre>
+
+  <div class="note warn">
+    <span class="tag">已知逻辑缺口</span>
+    <p><code>cycleMode()</code> 写的是 <code>if (currentMode >= 3) 1 else currentMode + 1</code>——只在 1/2/3 之间循环，<strong>永远切不到模式4（指向引导）</strong>。用戒指的盲人无法进入模式4。这是需要修的边界问题。</p>
+  </div>
+
+  <h3>BLE 连接的关键一步：CCCD 描述符</h3>
+  <p>要收到戒指的按键通知，光 <code>setCharacteristicNotification</code> 不够——<strong>必须往 CCCD（0x2902 描述符）写入 ENABLE_NOTIFICATION</strong>，否则外设根本不发通知。这是 BLE 新手最常漏的一步。</p>
+
+  <div class="code-label">BleRingManager.onServicesDiscovered —— 开启通知的两步</div>
+<pre><code>gatt.setCharacteristicNotification(characteristic, <span class="kw">true</span>)   <span class="cm">// 第一步：本地开关</span>
+<span class="kw">val</span> cccd = characteristic.getDescriptor(CCCD_UUID)         <span class="cm">// 0x2902</span>
+cccd.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+gatt.writeDescriptor(cccd)                                  <span class="cm">// 第二步：告诉外设"请推送"</span></code></pre>
+</section>
+
+<!-- ========== 7. 眼镜连接 ========== -->
+<section class="chapter reveal" id="glasses">
+  <div class="ch-num">07 / SMART GLASSES</div>
+  <h2>眼镜连接 · Rokid CXR-L 全流程<span class="en">Auth → Connect → HUD → Callback</span></h2>
+
+  <p>Rokid 眼镜的接入比戒指复杂，因为它<strong>不是直接蓝牙，而是要经过 Rokid AI App 授权</strong>。<code>CXRGlassesManager</code> 封装了完整状态机。</p>
+
+  <h3>连接状态机</h3>
+  <div class="flow">
+    <div class="step"><span class="n">1</span><span class="t">DISCONNECTED —— 检查 Rokid AI App 是否安装（没装直接报错引导安装）</span></div>
+    <div class="arrow">↓</div>
+    <div class="step"><span class="n">2</span><span class="t">AUTHENTICATING —— requestAuthorization 拉起 Rokid App 授权界面，拿 token</span></div>
+    <div class="arrow">↓</div>
+    <div class="step"><span class="n">3</span><span class="t">CONNECTING —— CXRLink.connect(token)，带 30 秒超时保护</span></div>
+    <div class="arrow">↓</div>
+    <div class="step"><span class="n">4</span><span class="t">CONNECTED —— configCXRSession(CUSTOMVIEW)，可以推 HUD 了</span></div>
+  </div>
+
+  <div class="code-label">CXRGlassesManager —— 即时授权的快路径</div>
+<pre><code><span class="kw">val</span> authResult = RokidCxrHelper.requestAuthorization(activity)
+<span class="kw">if</span> (authResult.immediateToken != <span class="kw">null</span>) {
+    <span class="cm">// 之前授权过，SDK 直接返回 token，跳过用户操作</span>
+    connectionState = ConnectionState.CONNECTING
+    connectWithToken(activity, authResult.immediateToken, onImmediateConnect)
+} <span class="kw">else if</span> (authResult.started) {
+    <span class="cm">// 首次：授权 Activity 已弹出，等 onActivityResult 回来</span>
+}</code></pre>
+
+  <div class="note">
+    <span class="tag">超时保护的写法</span>
+    <p>连接用了<strong>双 job 竞速</strong>：一个真正 connect，一个 <code>delay(30s)</code> 计时；谁先完成谁生效，用 <code>callbackCalled</code> 标志位保证回调只触发一次。这是处理"可能永远不回来的异步操作"的经典模式，值得学。</p>
+  </div>
+
+  <h3>HUD 显示 + 交互回调</h3>
+  <p>连上后，眼镜是<strong>双向</strong>的：手机往 HUD 推文字（<code>sendText</code>），眼镜的触控板/语音也能反向触发命令（<code>GlassesInteractionCallback</code>）。<code>updateHUDStatus</code> 会把当前模式名 + 状态一起显示。</p>
+
+  <div class="code-label">HUD 显示当前模式</div>
+<pre><code><span class="kw">fun</span> <span class="fn">updateHUDStatus</span>(mode: Int, status: String) {
+    <span class="kw">val</span> modeText = <span class="kw">when</span> (mode) {
+        <span class="nm">1</span> -&gt; <span class="st">"障碍物检测"</span>; <span class="nm">2</span> -&gt; <span class="st">"文字识别"</span>
+        <span class="nm">3</span> -&gt; <span class="st">"场景描述"</span>; <span class="nm">4</span> -&gt; <span class="st">"指向引导"</span>
+        <span class="kw">else</span> -&gt; <span class="st">"未知"</span>
+    }
+    sendText(<span class="st">"$modeText\n$status"</span>)
+    setupFunctionIcons()  <span class="cm">// 幂等：确保触控板功能图标可用</span>
+}</code></pre>
+
+  <div class="note warn">
+    <span class="tag">待补能力</span>
+    <p>目前眼镜主要用作<em>输出（HUD）</em>和<em>触发（回调）</em>，但<strong>眼镜自带摄像头的画面还没接入主循环</strong>——你图2/图1 想要"眼镜第一视角拍照 → 分析"，需要补上 <code>takePhoto</code> 的图像回调链路（当前调用后拿不到图）。</p>
+  </div>
+</section>
+
+<!-- ========== 8. 云端推理 ========== -->
+<section class="chapter reveal" id="cloud">
+  <div class="ch-num">08 / CLOUD INFERENCE</div>
+  <h2>云端推理 · OpenAI 兼容多模态<span class="en">Vision API over HTTP</span></h2>
+
+  <p>端侧模型只能识别 80 类物体、读不懂复杂场景。要"用一段话描述眼前"（模式3），必须靠<strong>云端多模态大模型</strong>。项目用的是 <em>OpenAI 兼容格式</em>——这意味着通义千问、GPT、Gemini、StepFun 等任何兼容此格式的服务都能直接对接，只改 baseURL 和 key。</p>
+
+  <h3>请求体：图片转 base64 塞进 messages</h3>
+  <p>多模态请求的核心是 <code>content</code> 数组里同时放<em>文字提示</em>和<em>图片</em>，图片编码成 <code>data:image/jpeg;base64,...</code> 的 data URL。</p>
+
+  <div class="code-label">AIInferenceManager.buildVisionRequestJson —— OpenAI 多模态格式</div>
+<pre><code>{
+  <span class="st">"model"</span>: <span class="st">"step-1v-8k"</span>,
+  <span class="st">"messages"</span>: [{
+    <span class="st">"role"</span>: <span class="st">"user"</span>,
+    <span class="st">"content"</span>: [
+      { <span class="st">"type"</span>: <span class="st">"text"</span>, <span class="st">"text"</span>: <span class="st">"请描述这个场景，提示避障"</span> },
+      { <span class="st">"type"</span>: <span class="st">"image_url"</span>,
+        <span class="st">"image_url"</span>: { <span class="st">"url"</span>: <span class="st">"data:image/jpeg;base64,/9j/4AAQ..."</span> } }
+    ]
+  }]
+}</code></pre>
+
+  <div class="code-label">发起请求 —— 用 OkHttp，非流式 .execute()</div>
+<pre><code><span class="kw">private suspend fun</span> <span class="fn">runStepFunInference</span>(bitmap: Bitmap, mode: Int): String =
+  withContext(Dispatchers.IO) {
+    <span class="kw">val</span> base64 = bitmap.toBase64Jpeg()
+    <span class="kw">val</span> prompt = promptForMode(mode)            <span class="cm">// 不同模式用不同提示词</span>
+    <span class="kw">val</span> json = buildVisionRequestJson(prompt, base64)
+    <span class="kw">val</span> resp = httpClient.newCall(request).execute()   <span class="cm">// 阻塞式，等完整响应</span>
+    parseVisionResponse(resp.body?.string())     <span class="cm">// 取 choices[0].message.content</span>
+  }</code></pre>
+
+  <div class="note">
+    <span class="tag">提示词工程</span>
+    <p>同一张图，不同模式喂<strong>不同 prompt</strong>：模式1问"有什么障碍、在哪、要不要避"，模式3问"整体描述这个场景"。大模型的能力靠 prompt 定向——这是端云协同里"云端"最灵活的部分。</p>
+  </div>
+
+  <div class="note warn">
+    <span class="tag">当前是非流式</span>
+    <p><code>.execute()</code> 会等<em>整段</em>结果生成完才返回，用户要干等好几秒。你图2 期望的体验更接近<strong>流式（SSE）边生成边播报</strong>，这需要改成流式读取 + 分句 TTS。这是待做功能的一部分。</p>
+  </div>
+</section>
+
+<!-- ========== 9. 声纹识别 ========== -->
+<section class="chapter reveal" id="voice">
+  <div class="ch-num">09 / VOICEPRINT</div>
+  <h2>声纹识别 · ECAPA-TDNN<span class="en">Speaker Verification via ONNX</span></h2>
+
+  <p>声纹用于<strong>区分是不是机主本人在说话</strong>（防止旁人误触发或用于个性化）。用的是 <code>VoicePrintManager</code> + ONNX Runtime，模型是语音领域经典的 <strong>ECAPA-TDNN</strong>，它把一段语音压成一个固定长度的向量（embedding）。</p>
+
+  <h3>原理：把声音变成向量，比余弦相似度</h3>
+  <div class="flow">
+    <div class="step"><span class="n">1</span><span class="t">注册 —— 录一段机主的话，跑 ECAPA-TDNN 得到 embedding，存下来</span></div>
+    <div class="arrow">↓</div>
+    <div class="step"><span class="n">2</span><span class="t">验证 —— 新说一句，同样得 embedding</span></div>
+    <div class="arrow">↓</div>
+    <div class="step"><span class="n">3</span><span class="t">比对 —— 算两个向量的余弦相似度，超过阈值就认为是同一人</span></div>
+  </div>
+
+  <div class="code-label">余弦相似度 —— 声纹比对的数学核心</div>
+<pre><code><span class="kw">fun</span> <span class="fn">cosineSimilarity</span>(a: FloatArray, b: FloatArray): Float {
+    <span class="kw">var</span> dot = <span class="nm">0f</span>; <span class="kw">var</span> na = <span class="nm">0f</span>; <span class="kw">var</span> nb = <span class="nm">0f</span>
+    <span class="kw">for</span> (i <span class="kw">in</span> a.indices) {
+        dot += a[i] * b[i]
+        na  += a[i] * a[i]
+        nb  += b[i] * b[i]
+    }
+    <span class="kw">return</span> dot / (sqrt(na) * sqrt(nb))   <span class="cm">// ∈ [-1,1]，越接近 1 越像同一人</span>
+}</code></pre>
+
+  <div class="note warn">
+    <span class="tag">疑似路径 Bug</span>
+    <p>加载模型时常量定义 <code>MODEL_ASSET = "models/voiceprint/ecapa_tdnn.onnx"</code>，但 <code>copyAssetToCache()</code> 传的却是另一个变量 <code>MODEL_FILE</code>，路径疑似对不上，可能导致加载失败。这是需要核对的可疑点（见第 11 章清单）。</p>
+  </div>
+</section>
+
+<!-- ========== 10. 线程模型 ========== -->
+<section class="chapter reveal" id="thread">
+  <div class="ch-num">10 / CONCURRENCY</div>
+  <h2>协程与线程模型<span class="en">Coroutines: Main vs IO</span></h2>
+
+  <p>这个 App 的线程规则其实很简单，记住三条就够：</p>
+
+  <div class="curio-grid c3">
+    <div class="curio"><div class="idx">规则 1</div><h4>耗时活去 IO</h4><p>模型推理、网络请求、文件读写 → <code>Dispatchers.IO</code>，绝不阻塞主线程。</p></div>
+    <div class="curio"><div class="idx">规则 2</div><h4>碰 UI 回主线程</h4><p>更新界面、说话、操作相机 → <code>Dispatchers.Main</code> / <code>runOnUiThread</code>。</p></div>
+    <div class="curio"><div class="idx">规则 3</div><h4>回调线程要警惕</h4><p>BLE 回调在 Binder 线程，SDK 回调线程不定 → 一律显式切回主线程再动 UI。</p></div>
+  </div>
+
+  <div class="code-label">典型模式 —— withContext 在 IO 干活，切回 Main 更新</div>
+<pre><code>lifecycleScope.launch {                        <span class="cm">// 默认 Main</span>
+    <span class="kw">val</span> result = withContext(Dispatchers.IO) {   <span class="cm">// 切到 IO 跑推理</span>
+        aiManager.detectObstacles(bitmap)
+    }
+    <span class="cm">// 回到 Main，直接更新 UI 安全</span>
+    ttsManager.speak(result)
+    glassesManager?.showResult(result)
+}</code></pre>
+
+  <div class="note">
+    <span class="tag">SupervisorJob 的作用</span>
+    <p>各 Manager 的 <code>CoroutineScope</code> 用了 <code>SupervisorJob()</code>——意思是<strong>一个子协程崩了，不会连坐兄弟协程</strong>。对"多个独立异步任务并行"的场景（眼镜连接 + AI 推理 + 声纹），这能避免一处异常拖垮全部。<code>release()</code> 时 <code>scope.cancel()</code> 统一收尾，防止内存泄漏。</p>
+  </div>
+</section>
+
+<!-- ========== 11. 已知问题 + 待做功能 ========== -->
+<section class="chapter reveal" id="issues">
+  <div class="ch-num">11 / ISSUES &amp; ROADMAP</div>
+  <h2>已知问题 · 待做功能<span class="en">Real Bugs & The 端云协同 You Want to Build</span></h2>
+
+  <p>这一章把读全部代码后<strong>确认存在的问题</strong>汇总（区别于早期被证伪的臆测），再对着你的图2 讲清"端云协同"要怎么落地。</p>
+
+  <h3>A. 确认存在的问题清单</h3>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>严重度</th><th>位置</th><th>问题</th><th>修法方向</th></tr></thead>
+    <tbody>
+      <tr><td style="color:var(--danger)">高</td><td><code>OcrRecognizer</code></td><td>用 latin 识别器，<strong>中文读不了</strong>（注释却说支持中文）</td><td>换 ChineseTextRecognizerOptions，或模式2走云端</td></tr>
+      <tr><td style="color:var(--danger)">高</td><td><code>HandGuideManager</code></td><td>processFrame 与 release <strong>竞态</strong>，可能访问已释放 native handle</td><td>加状态锁/busy 标志，release 前等推理结束</td></tr>
+      <tr><td style="color:var(--gold-amber)">中</td><td>播报话术</td><td>"未检测到障碍"给盲人<strong>误导性安全感</strong>（模型没检测≠真安全）</td><td>改为"未识别到明显障碍，仍请谨慎"</td></tr>
+      <tr><td style="color:var(--gold-amber)">中</td><td><code>CameraManager</code></td><td>toBitmap 无<strong>旋转矫正</strong>，竖屏画面可能躺倒影响识别</td><td>传入 rotationDegrees 或用 ImageProxy 旋转信息</td></tr>
+      <tr><td style="color:var(--gold-amber)">中</td><td><code>TtsManager</code></td><td>用 QUEUE_ADD，连续检测时结果<strong>排队堆积</strong>，实时性差</td><td>实时结果用 QUEUE_FLUSH 打断旧播报</td></tr>
+      <tr><td style="color:var(--gold-amber)">中</td><td><code>cycleMode()</code></td><td>只在 1/2/3 循环，<strong>戒指切不到模式4</strong></td><td>上限改 4，或单独手势进入指向引导</td></tr>
+      <tr><td style="color:var(--gold-amber)">中</td><td><code>AppUpdateChecker</code></td><td><code>CURRENT_VERSION_CODE=595</code> 硬编码已过期，5.9.6 用户会被提示"更新到 5.9.6"</td><td>改用 <code>BuildConfig.VERSION_CODE</code></td></tr>
+      <tr><td style="color:var(--text-muted)">低</td><td><code>CameraManager</code></td><td>bindCameraUseCases 失败仍置 <code>_cameraStarted=true</code>，状态失真</td><td>失败分支不置 started</td></tr>
+      <tr><td style="color:var(--text-muted)">低</td><td><code>VoicePrintManager</code></td><td>MODEL_ASSET 与 copyAssetToCache 传参路径<strong>疑似不一致</strong></td><td>核对常量，统一路径</td></tr>
+      <tr><td style="color:var(--text-muted)">低</td><td>眼镜摄像头</td><td>takePhoto <strong>无图像回调</strong>，眼镜第一视角画面进不了主循环</td><td>补 SDK 图像回调 → 接入 captureAndAnalyze</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="note ok">
+    <span class="tag">已被证伪的臆测（不要误改）</span>
+    <p>早期子代理曾"幻觉"报过几个不存在的问题，逐一核对源码后<strong>确认为假</strong>：UpdateDialog 并非 DialogFragment（是 object + AlertDialog）；BLE 回调没有 Binder 线程崩溃（用了 runOnUiThread）；CCCD 已正确写入；gatt.close() 已调用。<em>记录在此，避免后续重复"修"正确的代码。</em></p>
+  </div>
+
+  <h3>B. 你要做的功能：端云协同（图2）</h3>
+  <p>图2 的目标链路是：<strong>端侧模型提取信息 → 手机 App → 云端大模型联合分析 → 结果返回 → 手机/眼镜语音播报</strong>。而当前代码（第 4 章）里端和云是 <code>when</code> <em>二选一</em>，从不协同。要落地图2，核心改造有四点：</p>
+
+  <div class="curio-grid c2">
+    <div class="curio"><div class="idx">改造 1</div><h4>端侧结果注入云端 prompt</h4><p>先跑 YOLO/HandLandmarker 拿到结构化信息（"左前方2米有椅子"），把它<strong>拼进云端 prompt</strong>，让大模型基于端侧线索做更准的判断，而不是纯靠图片。</p></div>
+    <div class="curio"><div class="idx">改造 2</div><h4>流式 SSE 边生成边播</h4><p>把 <code>.execute()</code> 非流式改成 <strong>SSE 流式</strong>读取，按句子切分实时喂 TTS，把"干等数秒"变成"边说边出"。</p></div>
+    <div class="curio"><div class="idx">改造 3</div><h4>失败降级回端侧</h4><p>云端超时/断网时，<strong>自动回退</strong>到纯端侧 YOLO 结果，保证"没网也能用"，符合导盲的安全底线。</p></div>
+    <div class="curio"><div class="idx">改造 4</div><h4>眼镜双通道 I/O</h4><p>可选：用<strong>眼镜摄像头</strong>取第一视角图（改造问题9/10），结果同时走<strong>眼镜语音/HUD</strong>，真正解放双手。</p></div>
+  </div>
+
+  <div class="code-label">端云协同的目标形态（示意）</div>
+<pre><code><span class="kw">suspend fun</span> <span class="fn">analyzeCollaborative</span>(bitmap: Bitmap, mode: Int): Flow&lt;String&gt; = flow {
+    <span class="cm">// ① 端侧先提取结构化线索（快，不依赖网络）</span>
+    <span class="kw">val</span> edgeHints = yoloDetector.detect(bitmap)      <span class="cm">// "左前方2米:椅子; 正前方:人"</span>
+
+    <span class="kw">try</span> {
+        <span class="cm">// ② 端侧线索注入云端 prompt，联合分析（流式）</span>
+        <span class="kw">val</span> prompt = <span class="st">"结合端侧检测[$edgeHints]，描述场景并给避障建议"</span>
+        cloudModel.streamVision(prompt, bitmap.toBase64Jpeg()).collect { chunk -&gt;
+            emit(chunk)                              <span class="cm">// ③ 边生成边播报</span>
+        }
+    } <span class="kw">catch</span> (e: Exception) {
+        <span class="cm">// ④ 云端失败 → 降级用端侧结果，保证可用</span>
+        emit(edgeHints)
+    }
+}</code></pre>
+
+  <div class="note">
+    <span class="tag">落地建议顺序</span>
+    <p>建议先修 <strong>A 清单里的高危两项</strong>（中文OCR、Hand竞态）+ 版本号硬编码，让现有功能稳；再做 <strong>改造1（端侧线索注入）</strong>——它不改架构、收益最大；然后 <strong>改造2（流式）</strong>提升体验；<strong>改造3（降级）</strong>保底线；眼镜双通道（改造4）作为最后的锦上添花。这是一条自底向上、每步可验证的路径。</p>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="line"></div>
+  <div>VisionLink 导盲 App · 项目学习教程 · v5.9.6</div>
+  <div style="margin-top:8px;color:var(--text-dim)">Kotlin · CameraX · MediaPipe · Rokid CXR-L · ONNX Runtime</div>
+  <div style="margin-top:8px;color:var(--gold-deep)">你想猫 · 2026</div>
+</footer>
+
+<script>
+(function(){
+  var els = document.querySelectorAll('.reveal');
+  if(!('IntersectionObserver' in window)){els.forEach(function(e){e.classList.add('on')});return;}
+  var io = new IntersectionObserver(function(entries){
+    entries.forEach(function(en){
+      if(en.isIntersecting){en.target.classList.add('on');io.unobserve(en.target);}
+    });
+  },{threshold:0.08,rootMargin:'0px 0px -40px 0px'});
+  els.forEach(function(e){io.observe(e);});
+})();
+</script>
+
+</body>
+</html>

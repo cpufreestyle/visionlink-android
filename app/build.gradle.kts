@@ -11,8 +11,8 @@ android {
         applicationId = "com.visionlink.android"
         minSdk = 31
         targetSdk = 35
-        versionCode = 595
-        versionName = "5.9.5"
+        versionCode = 596
+        versionName = "5.9.6"
 
         multiDexEnabled = true
 
