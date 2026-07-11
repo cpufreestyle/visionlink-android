@@ -1,11 +1,11 @@
 ﻿# VisionLink Android - AI 助盲智能眼镜
 
 > 基于 Android 的多模态 AI 助盲眼镜系统，支持端侧推理与云端 API 双模式  
-> 当前版本: **v5.3.0**
+> 当前版本: **v5.9.6**
 
 [![Android](https://img.shields.io/badge/Android-13+-green.svg)](https://www.android.com/)
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.0.0-blue.svg)](https://kotlinlang.org/)
-[![Version](https://img.shields.io/badge/version-5.3.0-orange.svg)](https://github.com/cpufreestyle/visionlink-android/releases)
+[![Version](https://img.shields.io/badge/version-5.9.6-orange.svg)](https://github.com/cpufreestyle/visionlink-android/releases)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ---
@@ -83,7 +83,7 @@
 
 从 GitHub Releases 下载最新版本：
 
-👉 **[v5.3.0 下载](https://github.com/cpufreestyle/visionlink-android/releases/download/v5.3.0/visionlink-android-v5.3.0.apk)**
+👉 **[v5.9.6 下载](https://github.com/cpufreestyle/visionlink-android/releases/download/v5.9.6/visionlink-android-v5.9.6.apk)**
 
 ### 系统要求
 
@@ -362,6 +362,72 @@ APK 输出路径：`app/build/outputs/apk/release/app-release.apk`
 ---
 
 ## 📝 更新日志
+
+### v5.9.6
+
+- **修复启动闪退**（关键）：AndroidManifest 主题从 AppCompat 改为 MaterialComponents Bridge，修复 MaterialButton + AppCompat 主题不兼容导致的 inflate 崩溃
+- 新增完整项目学习教程（`docs/visionlink-tutorial.html`，11 章）
+
+### v5.9.5
+
+- **崩溃诊断增强**：内置 GitHub Token，CrashReporter 自动上传崩溃日志到 GitHub Issues
+- **Native 库兼容性**：启用 `extractNativeLibs` + `useLegacyPackaging`，解决 ML Kit native 库加载问题
+
+### v5.9.4
+
+- **修复 v5.9.3 闪退**：回退 YoloDetector 显式 Delegate 设置，恢复 MediaPipe 默认值
+- 添加 OkHttp/Okio ProGuard 规则
+
+### v5.9.3
+
+- 扩展 Gemma 4 模型搜索路径（新增 context.filesDir、/sdcard/ 等目录）
+- 新增手动选择 .litertlm 模型文件功能
+- 修复版本号解析错误（5.9.2 的 versionCode 59 < 61 导致无法检测更新）
+- 修复 StepFun API 连接池和超时参数
+
+### v5.9.2
+
+- **底部按钮布局重构**：从 17 个按钮滚动条改为两行固定网格（4+4），无需滑动
+- **启动自动初始化 YOLO**：内置模型，无需手动初始化即可直接拍照
+- **拍照自动初始化**：点击拍照时自动初始化 YOLO 并执行
+- **模式切换实际生效**：切换模式后重置播报指纹，立即使用新模式
+
+### v5.9.1
+
+- 摄像头权限与通知权限分离
+- 连续检测播报优化（指纹缩短到 30 字符，间隔从 12s 缩短到 8s）
+- 障碍物检测距离估算优化
+- 集成 ML Kit Text Recognition，YOLO 引擎下文字识别可离线
+
+### v5.9.0
+
+- **双源自动更新**：同时检测 GitHub 和 Gitee 仓库，并发竞速取最优版本
+- 修复历史 release notes 中文乱码问题
+
+### v5.8.0
+
+- **StepFun 模型更新**：step-1-flash/step-1v-8k → step-3.5-flash/step-1o-turbo-vision
+
+### v5.7.0
+
+- 修复 APK 16KB 页面对齐问题（useLegacyPackaging = false）
+- 内置默认 StepFun API Key
+
+### v5.6.0
+
+- **模型更新**：Gemma 3n → Gemma 4 E2B-it
+- 眼镜授权超时从 120s 缩短到 30s
+
+### v5.5.0
+
+- **YOLO 物体检测引擎**：EfficientDet-Lite0（COCO 80类），约 30ms/帧，全离线
+- **AI 引擎切换**：YOLO / Gemma 4 / API 三种引擎一键切换
+
+### v5.4.0
+
+- 合并 PR #4：Debug BroadcastReceiver + LM Studio 本地代理
+- 眼镜 HUD 交互：6 个可点击功能按钮
+- 删除 4 个未使用的控制器（AIController、GuideModeController、VoicePrintController、ContinuousDetectionController）
 
 ### v5.3.0
 
