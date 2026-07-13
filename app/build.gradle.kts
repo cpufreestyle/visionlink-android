@@ -102,7 +102,7 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.4")
 
     // WorkManager：大模型前台服务下载，App 被杀也不中断
-    implementation("androidx.work:work-runtime-ktx:2.9.1")
+    implementation("androidx.work:work-runtime-ktx:2.11.2")
 
     // CameraX
     implementation("androidx.camera:camera-camera2:1.4.0")
