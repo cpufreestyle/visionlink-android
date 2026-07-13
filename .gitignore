@@ -1,0 +1,23 @@
+# 构建产物
+/build/
+app/build/
+.gradle/
+build/
+
+# 本地配置(含 SDK 路径)
+local.properties
+
+# IDE
+.idea/
+*.iml
+*.iws
+*.ipr
+.DS_Store
+
+# APK / 中间产物
+*.apk
+*.aab
+captures/
+
+# 说明:app/src/main/assets/ 下的 tflite / hand_landmarker.task 是运行必需的小模型(共约 23M),保留以便直接构建;
+# 也可用项目根 model_export/export_models.py 重新导出。

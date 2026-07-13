@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">导盲眼</string>
+    <string name="need_camera">需要摄像头权限才能进行障碍识别</string>
+    <string name="switch_model">切换模型</string>
+</resources>
