@@ -14,6 +14,10 @@
         android:maxSdkVersion="32" />
     <!-- Keep screen on -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- 大模型后台下载：前台服务（dataSync）+ 通知，保证 App 被杀也不中断 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Bluetooth permissions for BLE ring -->
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
@@ -68,6 +72,12 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+
+        <!-- 给 WorkManager 的前台服务补上 dataSync 类型（Android 14+ 大文件下载要求） -->
+        <service
+            android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:foregroundServiceType="dataSync"
+            tools:node="merge" />
 
     </application>
 

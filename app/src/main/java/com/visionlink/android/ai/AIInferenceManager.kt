@@ -784,7 +784,12 @@ class AIInferenceManager(private val context: Context) {
     fun isInitialized(): Boolean = _state.value.isInitialized
     fun initError(): String? = _state.value.initError
     fun getEngine(): InferenceEngine = currentEngine
-    fun isModelDownloaded(): Boolean = _state.value.modelDownloaded
+    /** 真实检查：下载目录里是否已有达标的 .litertlm 模型文件 */
+    fun isModelDownloaded(): Boolean {
+        if (com.visionlink.android.utils.ModelDownloader.isComplete(context)) return true
+        // 兼容手动导入/其它位置：复用 findModelFile 扫描
+        return findModelFile(File(context.filesDir, MODEL_DIR)) != null
+    }
     fun getCurrentFps(): Int = _state.value.currentFps
 
     private fun updateFps() {
@@ -798,13 +803,23 @@ class AIInferenceManager(private val context: Context) {
 
     // ========== Stub Methods for Compatibility ==========
 
-    suspend fun downloadModel(onProgress: (Int) -> Unit): Boolean =
-        withContext(Dispatchers.IO) {
-            Log.d(TAG, "Model downloaded (using API, no local model needed)")
-            updateState { copy(modelDownloaded = true, downloadProgress = 100) }
-            onProgress(100)
-            true
+    /**
+     * 界面把下载进度回写到 _state，让 observeAIState 统一显示。
+     * 实际下载由 WorkManager 前台服务（ModelDownloadWorker + ModelDownloader）承载。
+     */
+    fun reportDownloadProgress(percent: Int, totalMb: Long) {
+        updateState {
+            copy(
+                downloadProgress = percent.coerceIn(0, 100),
+                modelSizeMb = if (totalMb > 0) totalMb else modelSizeMb
+            )
         }
+    }
+
+    /** 下载完成后标记模型就绪 */
+    fun onModelDownloaded() {
+        updateState { copy(modelDownloaded = true, downloadProgress = 100, initError = null) }
+    }
 
     fun getModelSizeMb(): Long = 0
 

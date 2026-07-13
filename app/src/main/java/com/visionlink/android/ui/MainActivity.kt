@@ -19,6 +19,13 @@ import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
+import androidx.work.Constraints
+import androidx.work.ExistingWorkPolicy
+import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
+import com.visionlink.android.work.ModelDownloadWorker
 import com.visionlink.android.ai.AIInferenceManager
 import com.visionlink.android.ai.ModelApiConfig
 import com.visionlink.android.ai.ModelApiConfigManager
@@ -121,6 +128,7 @@ class MainActivity : AppCompatActivity() {
         setupUI()
         setupDebugCommands()
         observeAIState()
+        observeModelDownload()
         checkPermissions()
 
         // 启动后检查更新
@@ -351,15 +359,19 @@ class MainActivity : AppCompatActivity() {
             }
         } else if (nextEngine == AIInferenceManager.InferenceEngine.EDGE) {
             // Gemma 4 需要模型文件
-            scope.launch {
-                val testResult = aiManager.testEdgeConnection()
-                if (testResult.startsWith("✅")) {
-                    aiManager.initialize()
-                    runOnUiThread { binding.tvAiStatus.text = "Gemma 4 Ready" }
-                } else {
-                    runOnUiThread {
-                        binding.tvAiStatus.text = testResult
-                        speakSafely("Gemma 4 模型未下载")
+            if (modelDownloadRunning) {
+                // 正在后台下载：提示等待，进度由 observeModelDownload 显示
+                binding.tvAiStatus.text = if (isEnglish) "Model downloading..." else "模型下载中，请稍候…"
+                speakSafely(if (isEnglish) "Model is downloading" else "模型正在后台下载")
+            } else {
+                scope.launch {
+                    val testResult = aiManager.testEdgeConnection()
+                    if (testResult.startsWith("✅")) {
+                        aiManager.initialize()
+                        runOnUiThread { binding.tvAiStatus.text = "Gemma 4 Ready" }
+                    } else {
+                        // 模型未下载 → 弹提示，引导后台下载
+                        runOnUiThread { promptDownloadModel() }
                     }
                 }
             }
@@ -408,7 +420,15 @@ class MainActivity : AppCompatActivity() {
                 updateEngineButton()
 
                 if (state.currentFps > 0) binding.tvFps.text = "FPS: ${state.currentFps}"
-                if (state.downloadProgress in 1..99) binding.tvAiStatus.text = if (isEnglish) "Downloading: ${state.downloadProgress}%" else "\u4e0b\u8f7d\u4e2d: ${state.downloadProgress}%"
+                // \u6a21\u578b\u540e\u53f0\u4e0b\u8f7d\u8fdb\u5ea6\uff1a\u4e3b\u754c\u9762\u72b6\u6001\u680f\u5b9e\u65f6\u663e\u793a\uff08\u5e26\u6a21\u578b\u5927\u5c0f\u63d0\u793a\uff09
+                if (state.downloadProgress in 1..99) {
+                    val sizeHint = if (state.modelSizeMb > 0) " / ${state.modelSizeMb}MB" else ""
+                    binding.tvAiStatus.visibility = android.view.View.VISIBLE
+                    binding.tvAiStatus.text = if (isEnglish)
+                        "Gemma model downloading ${state.downloadProgress}%$sizeHint"
+                    else
+                        "Gemma \u6a21\u578b\u4e0b\u8f7d\u4e2d ${state.downloadProgress}%$sizeHint"
+                }
 
                 if (state.isInitialized) {
                     binding.tvAiStatus.text = if (isEnglish) "$engineText ready" else "$engineText \u5c31\u7eea"
@@ -839,33 +859,108 @@ class MainActivity : AppCompatActivity() {
         return result
     }
 
+    /**
+     * 下载模型入口（菜单/引擎切换共用）：先判断状态，再弹提示。
+     */
     private fun downloadModel() {
         if (aiManager.isModelDownloaded()) {
-            Toast.makeText(this, "Model already downloaded", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, if (isEnglish) "Model already downloaded" else "模型已下载", Toast.LENGTH_SHORT).show()
             return
         }
-        binding.tvAiStatus.text = getString(com.visionlink.android.R.string.status_downloading)
-        binding.tvAiStatus.visibility = android.view.View.VISIBLE
+        promptDownloadModel()
+    }
 
-        scope.launch {
-            try {
-                val success = aiManager.downloadModel { progress ->
-                    if (!isDestroyed) {
-                        runOnUiThread { binding.tvAiStatus.text = "Downloading: $progress%" }
-                    }
-                }
-                if (!isDestroyed) {
-                    if (success) speakSafely(if (isEnglish) "Model downloaded." else "模型已下载")
-                    else speakSafely(if (isEnglish) "Model download failed" else "模型下载失效")
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Download failed: ${e.message}", e)
-                if (!isDestroyed) {
-                    ttsManager.speak("下载失败")
-                    speakSafely(if (isEnglish) "Model download failed" else "模型下载失效")
+    /**
+     * 首次使用 Gemma / 模型缺失时的下载提示对话框。
+     * 确认后走后台下载，主界面状态栏实时显示进度（observeAIState 处理）。
+     */
+    private fun promptDownloadModel() {
+        if (modelDownloadRunning) {
+            Toast.makeText(this, if (isEnglish) "Model is downloading..." else "模型正在下载中…", Toast.LENGTH_SHORT).show()
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle(if (isEnglish) "Download Gemma 4 model?" else "下载 Gemma 4 模型？")
+            .setMessage(
+                if (isEnglish)
+                    "On-device Gemma 4 needs a one-time model file (~2.6GB). Wi-Fi is strongly recommended.\n\nIt downloads in the background — you can keep using YOLO or the cloud engine meanwhile. Progress shows in the top status bar."
+                else
+                    "端侧 Gemma 4 需要下载模型文件（约 2.6GB，仅需一次）。强烈建议在 Wi-Fi 下进行。\n\n将在后台下载，期间可继续使用 YOLO 或云端引擎。进度显示在顶部状态栏。"
+            )
+            .setPositiveButton(if (isEnglish) "Download in background" else "后台下载") { _, _ -> startModelDownload() }
+            .setNegativeButton(if (isEnglish) "Cancel" else "取消") { _, _ ->
+                // 取消则回退到 YOLO，避免停在无法工作的 Gemma 引擎
+                if (aiManager.getEngine() == AIInferenceManager.InferenceEngine.EDGE) {
+                    aiManager.setEngine(AIInferenceManager.InferenceEngine.YOLO)
+                    updateEngineButton()
+                    scope.launch { aiManager.initialize() }
                 }
             }
-        }
+            .setCancelable(false)
+            .show()
+    }
+
+    /** 模型是否正在（WorkManager 前台服务）下载中——由 observeModelDownload 维护 */
+    private var modelDownloadRunning = false
+
+    /**
+     * 启动后台下载：入队 WorkManager 前台服务任务。
+     * App 被杀也不中断（前台服务承载），断点续传。进度由 observeModelDownload 显示到状态栏。
+     */
+    private fun startModelDownload() {
+        if (modelDownloadRunning) return
+        binding.tvAiStatus.visibility = android.view.View.VISIBLE
+        binding.tvAiStatus.text = if (isEnglish) "Model downloading 0%" else "模型下载中 0%"
+        speakSafely(if (isEnglish) "Downloading Gemma model in background" else "正在后台下载 Gemma 模型，请保持网络")
+
+        // 只要求联网（不强制 Wi-Fi，交由用户自行判断流量）；模型完成前保持任务
+        val constraints = Constraints.Builder()
+            .setRequiredNetworkType(NetworkType.CONNECTED)
+            .build()
+        val request = OneTimeWorkRequestBuilder<ModelDownloadWorker>()
+            .setConstraints(constraints)
+            .build()
+        // KEEP：已有下载任务则不重复入队（幂等）
+        WorkManager.getInstance(this).enqueueUniqueWork(
+            ModelDownloadWorker.UNIQUE_NAME,
+            ExistingWorkPolicy.KEEP,
+            request
+        )
+    }
+
+    /**
+     * 观察模型下载任务：把进度回写到 aiManager 状态（状态栏统一显示），
+     * 完成时标记就绪并在当前是 Gemma 时自动初始化。
+     */
+    private fun observeModelDownload() {
+        WorkManager.getInstance(this)
+            .getWorkInfosForUniqueWorkLiveData(ModelDownloadWorker.UNIQUE_NAME)
+            .observe(this) { infos ->
+                val info = infos?.firstOrNull() ?: return@observe
+                modelDownloadRunning =
+                    info.state == WorkInfo.State.RUNNING || info.state == WorkInfo.State.ENQUEUED
+                when (info.state) {
+                    WorkInfo.State.RUNNING -> {
+                        val pct = info.progress.getInt(ModelDownloadWorker.KEY_PERCENT, 0)
+                        val totalMb = info.progress.getLong(ModelDownloadWorker.KEY_TOTAL_MB, 0L)
+                        aiManager.reportDownloadProgress(pct, totalMb)
+                    }
+                    WorkInfo.State.SUCCEEDED -> {
+                        aiManager.onModelDownloaded()
+                        binding.tvAiStatus.text = if (isEnglish) "Gemma 4 model ready" else "Gemma 4 模型已就绪"
+                        speakSafely(if (isEnglish) "Gemma model ready" else "Gemma 模型已就绪")
+                        // 若当前仍选 Gemma，自动初始化
+                        if (aiManager.getEngine() == AIInferenceManager.InferenceEngine.EDGE) {
+                            scope.launch { aiManager.initialize() }
+                        }
+                    }
+                    WorkInfo.State.FAILED -> {
+                        binding.tvAiStatus.text = if (isEnglish) "Model download failed" else "模型下载失败，请重试"
+                        speakSafely(if (isEnglish) "Model download failed" else "模型下载失败")
+                    }
+                    else -> { /* ENQUEUED / BLOCKED / CANCELLED：无需额外处理 */ }
+                }
+            }
     }
 
     private fun captureAndAnalyze() {

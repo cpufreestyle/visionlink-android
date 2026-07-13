@@ -11,8 +11,8 @@ android {
         applicationId = "com.visionlink.android"
         minSdk = 31
         targetSdk = 35
-        versionCode = 596
-        versionName = "5.9.6"
+        versionCode = 597
+        versionName = "5.9.7"
 
         multiDexEnabled = true
 
@@ -100,6 +100,9 @@ dependencies {
     implementation("androidx.constraintlayout:constraintlayout:2.1.4")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.4")
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.4")
+
+    // WorkManager：大模型前台服务下载，App 被杀也不中断
+    implementation("androidx.work:work-runtime-ktx:2.9.1")
 
     // CameraX
     implementation("androidx.camera:camera-camera2:1.4.0")
