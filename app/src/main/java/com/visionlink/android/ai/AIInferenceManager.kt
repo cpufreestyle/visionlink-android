@@ -2,23 +2,15 @@ package com.visionlink.android.ai
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.util.Base64
 import android.util.Log
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import okhttp3.Response
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.ConnectionPool
@@ -32,9 +24,11 @@ import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 /**
- * AI Inference Manager - v4.7.0 (Real API Integration)
+ * AI Inference Manager
  *
- * Now supports real image analysis via Moonshot API (Kimi)
+ * 多引擎推理管理：YOLO（端侧物体检测）/ Edge（LiteRT-LM Gemma）/ StepFun API /
+ * LM Studio / 自定义 OpenAI 兼容 API。云端引擎共用一套 OpenAI Chat Completions
+ * 调用逻辑（callChatCompletions），通过参数区分各引擎的重试与鉴权差异。
  */
 class AIInferenceManager(private val context: Context) {
 
@@ -49,16 +43,11 @@ class AIInferenceManager(private val context: Context) {
         private const val STEPFUN_VISION_MODEL = "step-1o-turbo-vision"
         
         // Google AI Edge LiteRT-LM Configuration
-        private const val GEMMA_MODEL_NAME = "gemma-4-e2b-it"
         private const val MODEL_DIR = "litert_models"
 
-        const val MODEL_TYPE_GEMMA = "gemma4_e2b"
-        const val MODEL_TYPE_GEMINI = "gemini_nano"
         private const val TEMPERATURE = 0.1f
         private const val MAX_TOKENS = 256
         private const val IMAGE_SIZE = 448
-        private const val MIN_RAM_MB = 4096L
-        private const val MIN_SDK = 33
     }
 
     enum class InferenceEngine { NONE, AICORE, EDGE, LITERT_LM, CLOUD, STEPFUN, LM_STUDIO, CUSTOM, YOLO }
@@ -81,8 +70,6 @@ class AIInferenceManager(private val context: Context) {
     val state: StateFlow<ManagerState> = _state
 
     private var currentEngine: InferenceEngine = InferenceEngine.STEPFUN
-    private var currentMode: InferenceMode = InferenceMode.SINGLE_SHOT
-    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val httpClient = OkHttpClient.Builder()
         .connectTimeout(20, java.util.concurrent.TimeUnit.SECONDS)
         .readTimeout(90, java.util.concurrent.TimeUnit.SECONDS)
@@ -99,85 +86,37 @@ class AIInferenceManager(private val context: Context) {
     // ========== API Test Method ==========
 
 
-    suspend fun testApiConnection(): String = withContext(Dispatchers.IO) {
-        Log.d(TAG, "Testing API connection...")
-        
+    suspend fun testApiConnection(): String = testChatCompletions(
+        url = STEPFUN_API_URL,
+        apiKey = BuildConfig.STEPFUN_API_KEY_TEST,
+        model = STEPFUN_TEXT_MODEL,
+        label = "StepFun",
+        networkErrorHint = "网络错误: 无法连接\n可能网络无法访问 api.stepfun.com"
+    )
+
+    suspend fun testLmStudioConnection(): String = testChatCompletions(
+        url = lmStudioUrl,
+        apiKey = null,
+        model = "local-model",
+        label = "LM Studio",
+        networkErrorHint = "Network Error\n请确保:\n1. 手机和电脑在同一网络\n2. LM Studio 已启动\n3. 防火墙允许端口 1234"
+    )
+
+    /**
+     * 通用的 OpenAI 兼容 API 连通性测试：发送一条极短文本请求并解析回复
+     */
+    private suspend fun testChatCompletions(
+        url: String,
+        apiKey: String?,
+        model: String,
+        label: String,
+        networkErrorHint: String?
+    ): String = withContext(Dispatchers.IO) {
         try {
-            // 发送一个简单的测试请求
             val jsonBody = JSONObject().apply {
-                put("model", STEPFUN_TEXT_MODEL)
+                put("model", model)
                 put("temperature", 0.1f)
                 put("max_tokens", 50)
-                put("messages", JSONArray().apply {
-                    put(JSONObject().apply {
-                        put("role", "user")
-                        put("content", "Hello, this is a test. Please respond with just the word 'OK'.")
-                    })
-                })
-            }
-            
-            val requestBody = jsonBody.toString()
-                .toRequestBody("application/json".toMediaType())
-            
-            val request = Request.Builder()
-                .url(STEPFUN_API_URL)
-                .addHeader("Authorization", "Bearer ${BuildConfig.STEPFUN_API_KEY_TEST}")
-                .addHeader("Content-Type", "application/json")
-                .post(requestBody)
-                .build()
-            
-            Log.d(TAG, "Sending test request to api.stepfun.com...")
-            
-            val response = httpClient.newCall(request).execute()
-            val responseBody = response.body?.string()
-            
-            Log.d(TAG, "Response code: ${response.code}")
-            Log.d(TAG, "Response body: ${responseBody?.take(200)}")
-            
-            if (!response.isSuccessful) {
-                return@withContext "错误 ${response.code}: ${response.message}\n${responseBody?.take(200)}"
-            }
-            
-            if (responseBody == null) {
-                return@withContext "Error: Empty response"
-            }
-            
-            val jsonResponse = JSONObject(responseBody)
-            if (jsonResponse.has("error")) {
-                val errorMsg = jsonResponse.getJSONObject("error").getString("message")
-                return@withContext "API Error: $errorMsg"
-            }
-            
-            val choices = jsonResponse.getJSONArray("choices")
-            if (choices.length() > 0) {
-                val content = choices.getJSONObject(0)
-                    .getJSONObject("message")
-                    .getString("content")
-                Log.d(TAG, "API test SUCCESS: $content")
-                return@withContext "SUCCESS: $content"
-            }
-            
-            return@withContext "Response parsing error"
-            
-        } catch (e: IOException) {
-            Log.e(TAG, "Network error: ${e.message}", e)
-            return@withContext "网络错误: ${e.message}\n可能网络无法访问 api.stepfun.com"
-        } catch (e: Exception) {
-            Log.e(TAG, "API test error: ${e.message}", e)
-            return@withContext "Error: ${e.message}"
-        }
-    }
-
-    // ========== Public API ==========
-
-    suspend fun testLmStudioConnection(): String = withContext(Dispatchers.IO) {
-        Log.d(TAG, "Testing LM Studio connection to $lmStudioUrl...")
-        
-        try {
-            val jsonBody = JSONObject().apply {
-                put("model", "local-model")
-                put("temperature", 0.1f)
-                put("max_tokens", 20)
                 put("messages", JSONArray().apply {
                     put(JSONObject().apply {
                         put("role", "user")
@@ -185,55 +124,52 @@ class AIInferenceManager(private val context: Context) {
                     })
                 })
             }
-            
-            val requestBody = jsonBody.toString()
-                .toRequestBody("application/json".toMediaType())
-            
+
             val request = Request.Builder()
-                .url(lmStudioUrl)
+                .url(url)
                 .addHeader("Content-Type", "application/json")
-                .post(requestBody)
+                .apply { apiKey?.let { addHeader("Authorization", "Bearer $it") } }
+                .post(jsonBody.toString().toRequestBody("application/json".toMediaType()))
                 .build()
-            
-            Log.d(TAG, "Sending test request to LM Studio...")
+
+            Log.d(TAG, "Sending test request to [$label]...")
             val response = httpClient.newCall(request).execute()
             val responseBody = response.body?.string()
-            
-            Log.d(TAG, "LM Studio response: ${response.code}")
-            
+            Log.d(TAG, "[$label] response code: ${response.code}")
+
             if (!response.isSuccessful) {
-                return@withContext "Error ${response.code}: ${response.message}\nBody: ${responseBody?.take(200)}"
+                return@withContext "错误 ${response.code}: ${response.message}\n${responseBody?.take(200)}"
             }
-            
             if (responseBody == null) {
                 return@withContext "Error: Empty response"
             }
-            
+
             val jsonResponse = JSONObject(responseBody)
             if (jsonResponse.has("error")) {
                 val errorMsg = jsonResponse.getJSONObject("error").getString("message")
                 return@withContext "API Error: $errorMsg"
             }
-            
+
             val choices = jsonResponse.getJSONArray("choices")
             if (choices.length() > 0) {
                 val content = choices.getJSONObject(0)
                     .getJSONObject("message")
                     .getString("content")
-                Log.d(TAG, "LM Studio test SUCCESS: $content")
+                Log.d(TAG, "[$label] test SUCCESS: $content")
                 return@withContext "SUCCESS: $content"
             }
-            
+
             return@withContext "Response parsing error"
-            
         } catch (e: IOException) {
-            Log.e(TAG, "Network error: ${e.message}", e)
-            return@withContext "Network Error: ${e.message}\n请确保:\n1. 手机和电脑在同一网络\n2. LM Studio 已启动\n3. 防火墙允许端口 1234"
+            Log.e(TAG, "[$label] network error: ${e.message}", e)
+            return@withContext networkErrorHint ?: "Network Error: ${e.message}"
         } catch (e: Exception) {
-            Log.e(TAG, "LM Studio test error: ${e.message}", e)
+            Log.e(TAG, "[$label] test error: ${e.message}", e)
             return@withContext "Error: ${e.message}"
         }
     }
+
+    // ========== Public API ==========
 
     fun setEngine(engine: InferenceEngine) {
         currentEngine = engine
@@ -262,10 +198,10 @@ class AIInferenceManager(private val context: Context) {
     suspend fun initialize(): Boolean = withContext(Dispatchers.IO) {
         Log.d(TAG, "Initializing AI Inference Manager with ${currentEngine.name}")
 
-        // 对 Moonshot 引擎做一次 ping 检查，验证 API Key 有效
+        // 对 StepFun 引擎做一次 ping 检查，验证 API Key 有效
         // 注意：ping 失败不阻塞初始化，仅记录警告（网络波动不应阻止引擎切换）
         if (currentEngine == InferenceEngine.STEPFUN) {
-            val pingOk = pingMoonshotAPI()
+            val pingOk = pingStepFunApi()
             if (!pingOk) {
                 Log.w(TAG, "StepFun API ping failed — 可能是网络波动，初始化继续")
             }
@@ -330,15 +266,13 @@ class AIInferenceManager(private val context: Context) {
     }
 
     /**
-     * Ping Moonshot API 验证连通性
+     * Ping StepFun API 验证连通性（max_tokens=1 的极短请求，400 也视为 Key 有效）
      */
-    private suspend fun pingMoonshotAPI(): Boolean = withContext(Dispatchers.IO) {
+    private suspend fun pingStepFunApi(): Boolean = withContext(Dispatchers.IO) {
         try {
-            val client = pingHttpClient
-
             val requestBody = JSONObject().apply {
                 put("model", STEPFUN_TEXT_MODEL)
-                put("messages", org.json.JSONArray().apply {
+                put("messages", JSONArray().apply {
                     put(JSONObject().apply {
                         put("role", "user")
                         put("content", "ping")
@@ -354,10 +288,10 @@ class AIInferenceManager(private val context: Context) {
                 .post(requestBody.toRequestBody("application/json".toMediaType()))
                 .build()
 
-            val response = client.newCall(request).execute()
+            val response = pingHttpClient.newCall(request).execute()
             response.isSuccessful || response.code == 400  // 400 可能是 max_tokens 太小但 Key 有效
         } catch (e: Exception) {
-            Log.e(TAG, "Moonshot ping error: ${e.message}")
+            Log.e(TAG, "StepFun ping error: ${e.message}")
             false
         }
     }
@@ -372,10 +306,10 @@ class AIInferenceManager(private val context: Context) {
             Log.d(TAG, "Analyzing image with prompt: ${prompt.take(50)}...")
 
             val result = when (currentEngine) {
-                InferenceEngine.STEPFUN -> callMoonshotAPI(prompt, bitmap)
+                InferenceEngine.STEPFUN -> callStepFunApi(prompt, bitmap)
                 InferenceEngine.LM_STUDIO -> runLmStudioInference(prompt, bitmap)
                 InferenceEngine.EDGE -> runEdgeInference(prompt, bitmap)
-                InferenceEngine.CUSTOM -> callCustomAPI(prompt, bitmap)
+                InferenceEngine.CUSTOM -> callCustomApi(prompt, bitmap)
                 InferenceEngine.YOLO -> {
                     // YOLO 引擎：模式2用离线OCR，其他模式用物体检测
                     if (mode == 2) runOcrRecognition(bitmap)
@@ -389,10 +323,7 @@ class AIInferenceManager(private val context: Context) {
             result.trim()
         }
 
-    // ========== Perplexity API Integration ==========
-
-
-    // ========== Moonshot API Integration ==========
+    // ========== OpenAI 兼容 API 调用（StepFun / LM Studio / Custom 共用） ==========
 
     private fun bitmapToBase64(bitmap: Bitmap): String {
         return try {
@@ -407,12 +338,31 @@ class AIInferenceManager(private val context: Context) {
         }
     }
 
-    private suspend fun callMoonshotAPI(prompt: String, bitmap: Bitmap): String =
+    /** OpenAI Chat Completions 调用配置：通过参数保留各引擎的差异 */
+    private data class ChatConfig(
+        val url: String,
+        val apiKey: String?,                 // null = 不带 Authorization 头
+        val model: String,
+        val label: String,                   // 日志/错误信息中的引擎名
+        val maxRetries: Int = 2,
+        val delayHttpMs: Long = 1000,        // HTTP 非 2xx / error JSON 重试延迟
+        val delayIoMs: Long = 2000,          // IOException 重试延迟
+        val delayGenericMs: Long = 1000,     // 其他异常重试延迟
+        val retryOnApiError: Boolean = true, // 响应含 error JSON 时是否重试
+        val retryOnEmpty: Boolean = true,    // choices 为空时是否重试
+        val textFirst: Boolean = false,      // content 中文本是否放在图片前
+        val networkErrorHint: String? = null // IOException 耗尽后的自定义提示
+    )
+
+    /**
+     * 统一的 OpenAI 兼容 vision 调用：图片(base64) + prompt → 文本回复。
+     * 重试/延迟/鉴权语义由 ChatConfig 决定。
+     */
+    private suspend fun callChatCompletions(cfg: ChatConfig, prompt: String, bitmap: Bitmap): String =
         withContext(Dispatchers.IO) {
             var retryCount = 0
-            val maxRetries = 3
 
-            while (retryCount <= maxRetries) {
+            while (retryCount <= cfg.maxRetries) {
                 try {
                     val base64Image = bitmapToBase64(bitmap)
                     if (base64Image.isEmpty()) {
@@ -420,101 +370,119 @@ class AIInferenceManager(private val context: Context) {
                     }
 
                     // OpenAI 兼容格式 + vision 模型，图像随请求一起发送
+                    val imagePart = JSONObject().apply {
+                        put("type", "image_url")
+                        put("image_url", JSONObject().put("url", "data:image/jpeg;base64,$base64Image"))
+                    }
+                    val textPart = JSONObject().apply {
+                        put("type", "text")
+                        put("text", prompt)
+                    }
                     val jsonBody = JSONObject().apply {
-                        put("model", STEPFUN_VISION_MODEL)
+                        put("model", cfg.model)
                         put("temperature", TEMPERATURE)
                         put("max_tokens", MAX_TOKENS)
                         put("messages", JSONArray().apply {
                             put(JSONObject().apply {
                                 put("role", "user")
                                 put("content", JSONArray().apply {
-                                    put(JSONObject().apply {
-                                        put("type", "image_url")
-                                        put("image_url", JSONObject().apply {
-                                            put("url", "data:image/jpeg;base64,$base64Image")
-                                        })
-                                    })
-                                    put(JSONObject().apply {
-                                        put("type", "text")
-                                        put("text", prompt)
-                                    })
+                                    if (cfg.textFirst) {
+                                        put(textPart)
+                                        put(imagePart)
+                                    } else {
+                                        put(imagePart)
+                                        put(textPart)
+                                    }
                                 })
                             })
                         })
                     }
 
-                    val requestBody = jsonBody.toString()
-                        .toRequestBody("application/json".toMediaType())
-                    
                     val request = Request.Builder()
-                        .url(STEPFUN_API_URL)
-                        .addHeader("Authorization", "Bearer $STEPFUN_API_KEY")
+                        .url(cfg.url)
                         .addHeader("Content-Type", "application/json")
-                        .post(requestBody)
+                        .apply { cfg.apiKey?.let { addHeader("Authorization", "Bearer $it") } }
+                        .post(jsonBody.toString().toRequestBody("application/json".toMediaType()))
                         .build()
 
-                    Log.d(TAG, "Calling Moonshot API (attempt ${retryCount + 1})...")
+                    Log.d(TAG, "Calling [${cfg.label}] (attempt ${retryCount + 1})...")
                     val response = httpClient.newCall(request).execute()
                     val responseBody = response.body?.string()
 
                     if (!response.isSuccessful || responseBody == null) {
-                        Log.e(TAG, "API call failed: ${response.code}, ${response.message}")
-                        if (retryCount < maxRetries) {
+                        Log.e(TAG, "[${cfg.label}] call failed: ${response.code}, ${response.message}")
+                        if (retryCount < cfg.maxRetries) {
                             retryCount++
-                            delay(1500)
+                            if (cfg.delayHttpMs > 0) delay(cfg.delayHttpMs)
                             continue
                         }
-                        return@withContext "API 调用失败: ${response.message}"
+                        return@withContext "[${cfg.label}] 调用失败: ${response.code} ${response.message}"
                     }
 
                     val jsonResponse = JSONObject(responseBody)
                     if (jsonResponse.has("error")) {
                         val errorMsg = jsonResponse.getJSONObject("error").getString("message")
-                        Log.e(TAG, "API error: $errorMsg")
-                    if (retryCount < maxRetries) {
-                        retryCount++
-                        delay(1500)
-                        continue
-                    }
-                    return@withContext "API 错误: $errorMsg"
+                        Log.e(TAG, "[${cfg.label}] API error: $errorMsg")
+                        if (cfg.retryOnApiError && retryCount < cfg.maxRetries) {
+                            retryCount++
+                            if (cfg.delayHttpMs > 0) delay(cfg.delayHttpMs)
+                            continue
+                        }
+                        return@withContext "[${cfg.label}] API 错误: $errorMsg"
                     }
 
                     val choices = jsonResponse.getJSONArray("choices")
                     if (choices.length() > 0) {
-                        val message = choices.getJSONObject(0)
+                        val content = choices.getJSONObject(0)
                             .getJSONObject("message")
-                        val content = message.getString("content")
-                        Log.d(TAG, "Moonshot API success: ${content.take(100)}")
+                            .getString("content")
+                        Log.d(TAG, "[${cfg.label}] success: ${content.take(100)}")
                         return@withContext content.trim()
                     }
 
-                    if (retryCount < maxRetries) {
+                    if (cfg.retryOnEmpty && retryCount < cfg.maxRetries) {
                         retryCount++
                         continue
                     }
-                    return@withContext "API 返回为空"
+                    return@withContext "[${cfg.label}] 返回为空"
 
                 } catch (e: IOException) {
-                    Log.e(TAG, "Network error: ${e.message}", e)
-                    if (retryCount < maxRetries) {
+                    Log.e(TAG, "[${cfg.label}] network error: ${e.message}", e)
+                    if (retryCount < cfg.maxRetries) {
                         retryCount++
-                        delay(3000)
+                        delay(cfg.delayIoMs)
                         continue
                     }
-                    return@withContext "网络错误: ${e.message}"
+                    return@withContext cfg.networkErrorHint ?: "网络错误 [${cfg.label}]: ${e.message}"
                 } catch (e: Exception) {
-                    Log.e(TAG, "API error: ${e.message}", e)
-                    if (retryCount < maxRetries) {
+                    Log.e(TAG, "[${cfg.label}] error: ${e.message}", e)
+                    if (retryCount < cfg.maxRetries) {
                         retryCount++
-                        delay(2000)
+                        delay(cfg.delayGenericMs)
                         continue
                     }
-                    return@withContext "错误: ${e.message}"
+                    return@withContext "错误 [${cfg.label}]: ${e.message}"
                 }
             }
 
             return@withContext "重试次数已用尽"
         }
+
+    /** StepFun（阶跃星辰）vision API 调用 */
+    private suspend fun callStepFunApi(prompt: String, bitmap: Bitmap): String =
+        callChatCompletions(
+            ChatConfig(
+                url = STEPFUN_API_URL,
+                apiKey = STEPFUN_API_KEY,
+                model = STEPFUN_VISION_MODEL,
+                label = "StepFun",
+                maxRetries = 3,
+                delayHttpMs = 1500,
+                delayIoMs = 3000,
+                delayGenericMs = 2000
+            ),
+            prompt, bitmap
+        )
 
     // ========== LM Studio Local Connection ==========
 
@@ -523,225 +491,45 @@ class AIInferenceManager(private val context: Context) {
      * Local OpenAI-compatible proxy. Use adb reverse for USB-connected devices.
      */
     private var lmStudioUrl: String = BuildConfig.LM_STUDIO_URL
-    
+
     fun setLmStudioUrl(url: String) {
         lmStudioUrl = url
         Log.d(TAG, "LM Studio URL set to: $url")
     }
-    
+
+    /** LM Studio 本地推理（文本在前，无鉴权，错误不重试） */
     private suspend fun runLmStudioInference(prompt: String, bitmap: Bitmap): String =
-        withContext(Dispatchers.IO) {
-            var retryCount = 0
-            val maxRetries = 2
-
-            while (retryCount <= maxRetries) {
-                try {
-                    val base64Image = bitmapToBase64(bitmap)
-                    if (base64Image.isEmpty()) {
-                        return@withContext "图像转换失败"
-                    }
-
-                    // LM Studio uses OpenAI-compatible API format
-                    val jsonBody = JSONObject().apply {
-                        put("model", "local-model") // LM Studio ignores this, uses loaded model
-                        put("temperature", TEMPERATURE)
-                        put("max_tokens", MAX_TOKENS)
-                        put("messages", JSONArray().apply {
-                            put(JSONObject().apply {
-                                put("role", "user")
-                                put("content", JSONArray().apply {
-                                    put(JSONObject().apply {
-                                        put("type", "text")
-                                        put("text", prompt)
-                                    })
-                                    // LM Studio with vision model supports image input
-                                    put(JSONObject().apply {
-                                        put("type", "image_url")
-                                        put("image_url", JSONObject().apply {
-                                            put("url", "data:image/jpeg;base64,$base64Image")
-                                        })
-                                    })
-                                })
-                            })
-                        })
-                    }
-
-                    val requestBody = jsonBody.toString()
-                        .toRequestBody("application/json".toMediaType())
-
-                    val request = Request.Builder()
-                        .url(lmStudioUrl)
-                        .addHeader("Content-Type", "application/json")
-                        .post(requestBody)
-                        .build()
-
-                    Log.d(TAG, "Calling LM Studio at $lmStudioUrl (attempt ${retryCount + 1})...")
-                    val response = httpClient.newCall(request).execute()
-                    val responseBody = response.body?.string()
-
-                    if (!response.isSuccessful || responseBody == null) {
-                        Log.e(TAG, "LM Studio call failed: ${response.code}, ${response.message}")
-                        if (retryCount < maxRetries) {
-                            retryCount++
-                            continue
-                        }
-                        return@withContext "LM Studio 错误 ${response.code}: ${response.message}"
-                    }
-
-                    val jsonResponse = JSONObject(responseBody)
-                    if (jsonResponse.has("error")) {
-                        val errorMsg = jsonResponse.getJSONObject("error").getString("message")
-                        Log.e(TAG, "LM Studio API error: $errorMsg")
-                        return@withContext "LM Studio 错误: $errorMsg"
-                    }
-
-                    val choices = jsonResponse.getJSONArray("choices")
-                    if (choices.length() > 0) {
-                        val content = choices.getJSONObject(0)
-                            .getJSONObject("message")
-                            .getString("content")
-                        Log.d(TAG, "LM Studio result: ${content.take(50)}")
-                        return@withContext content
-                    }
-
-                    return@withContext "LM Studio 返回格式错误"
-
-                } catch (e: IOException) {
-                    Log.e(TAG, "Network error: ${e.message}", e)
-                    if (retryCount < maxRetries) {
-                        retryCount++
-                        delay(2000)
-                        continue
-                    }
-                    return@withContext "网络错误: 无法连接到 LM Studio ($lmStudioUrl)\n请确保:\n1. 手机和电脑在同一网络\n2. LM Studio 已启动\n3. 防火墙允许端口 1234"
-                } catch (e: Exception) {
-                    Log.e(TAG, "LM Studio error: ${e.message}", e)
-                    if (retryCount < maxRetries) {
-                        retryCount++
-                        delay(1000)
-                        continue
-                    }
-                    return@withContext "LM Studio 错误: ${e.message}"
-                }
-            }
-
-            return@withContext "重试次数已用尽"
-        }
+        callChatCompletions(
+            ChatConfig(
+                url = lmStudioUrl,
+                apiKey = null,
+                model = "local-model", // LM Studio 忽略此字段，使用已加载的模型
+                label = "LM Studio",
+                maxRetries = 2,
+                delayHttpMs = 0,
+                retryOnApiError = false,
+                retryOnEmpty = false,
+                textFirst = true,
+                networkErrorHint = "网络错误: 无法连接到 LM Studio ($lmStudioUrl)\n请确保:\n1. 手机和电脑在同一网络\n2. LM Studio 已启动\n3. 防火墙允许端口 1234"
+            ),
+            prompt, bitmap
+        )
 
     // ========== Custom API Integration (OpenAI-compatible) ==========
 
-    /**
-     * 调用用户自定义的 OpenAI 兼容 API
-     */
-    private suspend fun callCustomAPI(prompt: String, bitmap: Bitmap): String =
-        withContext(Dispatchers.IO) {
-            val config = customConfig ?: return@withContext "未配置自定义 API"
-            var retryCount = 0
-            val maxRetries = 2
-
-            while (retryCount <= maxRetries) {
-                try {
-                    val base64Image = bitmapToBase64(bitmap)
-                    if (base64Image.isEmpty()) {
-                        return@withContext "图像转换失败"
-                    }
-
-                    val jsonBody = JSONObject().apply {
-                        put("model", config.visionModel)
-                        put("temperature", TEMPERATURE)
-                        put("max_tokens", MAX_TOKENS)
-                        put("messages", JSONArray().apply {
-                            put(JSONObject().apply {
-                                put("role", "user")
-                                put("content", JSONArray().apply {
-                                    put(JSONObject().apply {
-                                        put("type", "image_url")
-                                        put("image_url", JSONObject().apply {
-                                            put("url", "data:image/jpeg;base64,$base64Image")
-                                        })
-                                    })
-                                    put(JSONObject().apply {
-                                        put("type", "text")
-                                        put("text", prompt)
-                                    })
-                                })
-                            })
-                        })
-                    }
-
-                    val requestBody = jsonBody.toString()
-                        .toRequestBody("application/json".toMediaType())
-
-                    val request = Request.Builder()
-                        .url(config.apiUrl)
-                        .addHeader("Authorization", "Bearer ${config.apiKey}")
-                        .addHeader("Content-Type", "application/json")
-                        .post(requestBody)
-                        .build()
-
-                    Log.d(TAG, "Calling Custom API [${config.name}] (attempt ${retryCount + 1})...")
-                    val response = httpClient.newCall(request).execute()
-                    val responseBody = response.body?.string()
-
-                    if (!response.isSuccessful || responseBody == null) {
-                        Log.e(TAG, "Custom API call failed: ${response.code}, ${response.message}")
-                        if (retryCount < maxRetries) {
-                            retryCount++
-                            delay(1000)
-                            continue
-                        }
-                        return@withContext "API 调用失败 [${config.name}]: ${response.code} ${response.message}"
-                    }
-
-                    val jsonResponse = JSONObject(responseBody)
-                    if (jsonResponse.has("error")) {
-                        val errorMsg = jsonResponse.getJSONObject("error").getString("message")
-                        Log.e(TAG, "Custom API error: $errorMsg")
-                        if (retryCount < maxRetries) {
-                            retryCount++
-                            delay(1000)
-                            continue
-                        }
-                        return@withContext "API 错误 [${config.name}]: $errorMsg"
-                    }
-
-                    val choices = jsonResponse.getJSONArray("choices")
-                    if (choices.length() > 0) {
-                        val content = choices.getJSONObject(0)
-                            .getJSONObject("message")
-                            .getString("content")
-                        Log.d(TAG, "Custom API success: ${content.take(100)}")
-                        return@withContext content.trim()
-                    }
-
-                    if (retryCount < maxRetries) {
-                        retryCount++
-                        delay(1000)
-                        continue
-                    }
-                    return@withContext "API 返回为空"
-
-                } catch (e: IOException) {
-                    Log.e(TAG, "Custom API network error: ${e.message}", e)
-                    if (retryCount < maxRetries) {
-                        retryCount++
-                        delay(2000)
-                        continue
-                    }
-                    return@withContext "网络错误 [${config.name}]: ${e.message}"
-                } catch (e: Exception) {
-                    Log.e(TAG, "Custom API error: ${e.message}", e)
-                    if (retryCount < maxRetries) {
-                        retryCount++
-                        delay(1000)
-                        continue
-                    }
-                    return@withContext "错误 [${config.name}]: ${e.message}"
-                }
-            }
-
-            return@withContext "重试次数已用尽"
-        }
+    /** 调用用户自定义的 OpenAI 兼容 API */
+    private suspend fun callCustomApi(prompt: String, bitmap: Bitmap): String {
+        val config = customConfig ?: return "未配置自定义 API"
+        return callChatCompletions(
+            ChatConfig(
+                url = config.apiUrl,
+                apiKey = config.apiKey,
+                model = config.visionModel,
+                label = config.name
+            ),
+            prompt, bitmap
+        )
+    }
 
     // ========== Prompt Building ==========
 
@@ -762,7 +550,6 @@ class AIInferenceManager(private val context: Context) {
     // ========== Lifecycle ==========
 
     fun release() {
-        scope.cancel()
         yoloDetector?.release()
         yoloDetector = null
         ocrRecognizer?.release()
@@ -770,7 +557,6 @@ class AIInferenceManager(private val context: Context) {
         litertEngine?.close()
         litertEngine = null
         currentEngine = InferenceEngine.NONE
-        currentMode = InferenceMode.SINGLE_SHOT
         updateState {
             copy(
                 isInitialized = false,
@@ -822,9 +608,6 @@ class AIInferenceManager(private val context: Context) {
     }
 
     fun getModelSizeMb(): Long = 0
-
-    fun getModelDir(): File = File(context.filesDir, "models")
-    fun getGemmaModelPath(): File = File(getModelDir(), "gemma-4-e2b-it.litertlm")
 
     // ========== LiteRT-LM Engine Instance ==========
     private var litertEngine: Engine? = null

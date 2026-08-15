@@ -258,15 +258,6 @@ class YoloDetector(private val context: Context) {
         else -> ""
     }
 
-    /** 根据物体中心 x 坐标给出方位描述（场景描述模式用） */
-    private fun directionPhrase(centerX: Float): String = when {
-        centerX < 0.2f -> "左侧"
-        centerX < 0.42f -> "左前方"
-        centerX <= 0.58f -> "前方"
-        centerX <= 0.8f -> "右前方"
-        else -> "右侧"
-    }
-
     /**
      * 释放资源
      */

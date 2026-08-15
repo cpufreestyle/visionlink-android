@@ -5,35 +5,23 @@ import android.graphics.Bitmap
 import android.graphics.Matrix
 import android.util.Log
 import androidx.camera.core.*
+import androidx.camera.core.resolutionselector.ResolutionSelector
+import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
-import com.visionlink.android.databinding.ActivityMainBinding
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.SharedFlow
-import kotlinx.coroutines.flow.asSharedFlow
 
 /**
  * Camera Manager - v2.0 (Continuous Detection Support)
  *
- * New in v2.0:
- * - Continuous frame analysis mode (real-time detection)
- * - Frame rate control (5/10/15 FPS)
- * - Analysis result flow for real-time updates
- * - Optimized for Samsung Galaxy S25 Ultra
+ * - Single-shot capture via ImageCapture
+ * - Throttled real-time frame callback for guide/continuous modes
  */
 class CameraManager(
     private val context: Context,
@@ -42,8 +30,6 @@ class CameraManager(
 
     companion object {
         private const val TAG = "CameraManager"
-        const val MODE_SINGLE_SHOT = 0
-        const val MODE_CONTINUOUS = 1
     }
 
     private var cameraProvider: ProcessCameraProvider? = null
@@ -51,23 +37,15 @@ class CameraManager(
     private var cameraExecutor: ExecutorService? = null
     private var imageAnalyzer: ImageAnalysis? = null
     private var imageCapture: ImageCapture? = null
-    private var currentMode = MODE_SINGLE_SHOT
-    private var isAnalyzing = false
 
     // 实时帧回调（指向引导等实时模式使用）
     @Volatile private var frameListener: ((Bitmap) -> Unit)? = null
     @Volatile private var frameIntervalMs: Long = 250L
     @Volatile private var lastFrameTs: Long = 0L
 
-    // Continuous mode state
-    private val _analysisResults = MutableSharedFlow<AnalysisResult>(replay = 0)
-    val analysisResults: SharedFlow<AnalysisResult> = _analysisResults.asSharedFlow()
-
-    data class AnalysisResult(
-        val bitmap: Bitmap?,
-        val result: String,
-        val timestamp: Long
-    )
+    // 连续检测：缓存分析流最新帧（720p，替代每轮全幅 takePicture 拍照）
+    @Volatile private var latestFrame: Bitmap? = null
+    @Volatile private var latestFrameTs: Long = 0L
 
     /**
      * 注册实时帧回调：按 intervalMs 节流，bitmap 已按 rotationDegrees 转正。
@@ -80,12 +58,44 @@ class CameraManager(
         Log.d(TAG, if (listener != null) "帧回调已注册 (间隔 ${intervalMs}ms)" else "帧回调已取消")
     }
 
+    /** 开始缓存分析流最新帧（连续检测用） */
+    fun startFrameCollection(intervalMs: Long = 500L) {
+        latestFrame = null
+        latestFrameTs = 0L
+        setFrameListener(intervalMs) { bmp ->
+            latestFrame = bmp
+            latestFrameTs = System.currentTimeMillis()
+        }
+    }
+
+    /** 停止缓存分析流帧 */
+    fun stopFrameCollection() {
+        setFrameListener(listener = null)
+        latestFrame = null
+        latestFrameTs = 0L
+    }
+
+    /** 取缓存的新鲜帧；超过 maxAgeMs 的旧帧返回 null */
+    fun takeLatestFrame(maxAgeMs: Long = 3000L): Bitmap? {
+        val ts = latestFrameTs
+        if (ts == 0L || System.currentTimeMillis() - ts > maxAgeMs) return null
+        return latestFrame
+    }
+
     /**
      * Start camera with continuous detection support
      */
-    suspend fun startCamera(mode: Int = MODE_SINGLE_SHOT, frameRate: Int = 10) = withContext(Dispatchers.Main) {
-        currentMode = mode
-        Log.d(TAG, "Starting camera in mode: $mode, frameRate: $frameRate")
+    suspend fun startCamera() = withContext(Dispatchers.Main) {
+        // 已绑定则跳过重绑：bindToLifecycle 是 lifecycle-aware 的，
+        // onResume 时 CameraX 会自动恢复采集，重复 unbindAll/rebind 反而会黑屏闪烁
+        val existingProvider = cameraProvider
+        val existingCapture = imageCapture
+        if (existingProvider != null && existingCapture != null && existingProvider.isBound(existingCapture)) {
+            Log.d(TAG, "Camera already bound, skip rebind")
+            return@withContext
+        }
+
+        Log.d(TAG, "Starting camera")
 
         if (cameraExecutor == null) {
             cameraExecutor = Executors.newSingleThreadExecutor()
@@ -98,12 +108,30 @@ class CameraManager(
         }
 
         val preview = Preview.Builder()
-            .setTargetResolution(android.util.Size(1920, 1080))
+            .setResolutionSelector(
+                ResolutionSelector.Builder()
+                    .setResolutionStrategy(
+                        ResolutionStrategy(
+                            android.util.Size(1920, 1080),
+                            ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER
+                        )
+                    )
+                    .build()
+            )
             .build()
             .also { it.setSurfaceProvider(previewView.surfaceProvider) }
 
         imageAnalyzer = ImageAnalysis.Builder()
-            .setTargetResolution(android.util.Size(1280, 720))
+            .setResolutionSelector(
+                ResolutionSelector.Builder()
+                    .setResolutionStrategy(
+                        ResolutionStrategy(
+                            android.util.Size(1280, 720),
+                            ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER
+                        )
+                    )
+                    .build()
+            )
             .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
             .build()
             .also { setupFrameAnalyzer(it) }
@@ -112,7 +140,16 @@ class CameraManager(
 
         try {
             imageCapture = ImageCapture.Builder()
-                .setTargetResolution(android.util.Size(1920, 1080))
+                .setResolutionSelector(
+                    ResolutionSelector.Builder()
+                        .setResolutionStrategy(
+                            ResolutionStrategy(
+                                android.util.Size(1920, 1080),
+                                ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER
+                            )
+                        )
+                        .build()
+                )
                 .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
                 .build()
 
@@ -124,7 +161,7 @@ class CameraManager(
                 imageAnalyzer,
                 imageCapture
             )
-            Log.d(TAG, "Camera started successfully in mode: $mode")
+            Log.d(TAG, "Camera started successfully")
             _cameraStarted = true
         } catch (e: Exception) {
             Log.e(TAG, "Camera start failed: ${e.message}", e)
@@ -171,22 +208,6 @@ class CameraManager(
     }
 
     /**
-     * Start continuous analysis
-     */
-    fun startContinuousAnalysis() {
-        Log.d(TAG, "Starting continuous analysis")
-        isAnalyzing = true
-    }
-
-    /**
-     * Stop continuous analysis
-     */
-    fun stopContinuousAnalysis() {
-        Log.d(TAG, "Stopping continuous analysis")
-        isAnalyzing = false
-    }
-
-    /**
      * Capture single frame using ImageCapture API
      */
     suspend fun capture(): Bitmap? = suspendCoroutine { cont ->
@@ -222,24 +243,11 @@ class CameraManager(
     }
 
     /**
-     * Switch mode (single shot <-> continuous)
-     */
-    suspend fun switchMode(mode: Int, frameRate: Int = 10) {
-        Log.d(TAG, "Switching to mode: $mode")
-        stopContinuousAnalysis()
-        startCamera(mode, frameRate)
-        if (mode == MODE_CONTINUOUS) {
-            startContinuousAnalysis()
-        }
-    }
-
-    /**
      * Release resources
      */
     fun release() {
         Log.d(TAG, "Releasing camera resources")
         frameListener = null
-        stopContinuousAnalysis()
         try {
             cameraProvider?.unbindAll()
         } catch (e: Exception) {

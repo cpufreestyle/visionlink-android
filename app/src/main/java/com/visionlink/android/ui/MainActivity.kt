@@ -14,7 +14,7 @@ import android.util.Log
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.app.ActivityCompat
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -62,14 +62,44 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         private const val TAG = "MainActivity"
-        private const val REQUEST_PERMISSIONS = 1001
-        private const val REQUEST_CAMERA_FOR_CAPTURE = 1003
-        private const val REQUEST_MODEL_FILE = 1005
         private const val ACTION_DEBUG_COMMAND = "com.visionlink.android.DEBUG_COMMAND"
     }
 
-    /** 标记：用户点击拍照时相机权限未授予，授权后自动重试 */
-    private var pendingCaptureAfterPermission = false
+    // ========== ActivityResult launchers ==========
+
+    /** 必须权限（相机+录音）请求结果 */
+    private val requestPermissionsLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { grants ->
+        val cameraGranted = grants[Manifest.permission.CAMERA] == true
+        val audioGranted = grants[Manifest.permission.RECORD_AUDIO] == true
+        if (cameraGranted && audioGranted) {
+            Log.d(TAG, "Required permissions granted, starting camera")
+            startCameraWithRetry()
+            initVoiceAndRing()
+        } else {
+            Log.w(TAG, "Required permissions denied: camera=$cameraGranted, audio=$audioGranted")
+            Toast.makeText(this, getString(com.visionlink.android.R.string.perm_camera_rationale), Toast.LENGTH_LONG).show()
+        }
+    }
+
+    /** 可选权限（通知/蓝牙）请求结果，拒绝不影响核心功能 */
+    private val requestOptionalPermissionsLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { grants -> Log.d(TAG, "Optional permission result: $grants") }
+
+    /** 模型文件选择（.litertlm） */
+    private val pickModelFileLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            Log.i(TAG, "Model file selected: $uri")
+            copyModelToInternal(uri)
+        } else {
+            Log.w(TAG, "Model file selection cancelled")
+        }
+    }
+
     /** 眼镜授权超时任务，收到 onActivityResult 时取消 */
     private var glassesAuthTimeoutJob: Job? = null
 
@@ -511,12 +541,14 @@ class MainActivity : AppCompatActivity() {
     private fun startContinuousDetection() {
         binding.tvStatus.text = getString(com.visionlink.android.R.string.status_continuous_active)
         lastContinuousFingerprint = null // 重置指纹，确保首次播报
-        // 真实的连续检测循环：拍照 → 当前模式分析 → 场景变化时播报 → 等待
+        // 真实的连续检测循环：取帧 → 当前模式分析 → 场景变化时播报 → 等待
         continuousJob?.cancel()
+        // 优先用分析流缓存的最新帧（720p，低延迟低功耗），无新鲜帧时回退全幅拍照
+        cameraManager.startFrameCollection(500L)
         continuousJob = scope.launch {
             while (isActive && isContinuousMode && !isDestroyed) {
                 try {
-                    val bitmap = cameraManager.capture()
+                    val bitmap = cameraManager.takeLatestFrame() ?: cameraManager.capture()
                     if (bitmap == null) {
                         delay(1000)
                         continue
@@ -539,10 +571,10 @@ class MainActivity : AppCompatActivity() {
                         lastContinuousFingerprint = fingerprint
                         lastContinuousAnnounceTs = now
                     }
-            } catch (e: Exception) {
-                Log.e(TAG, "Continuous detection error: ${e.message}", e)
-                CrashReporter.reportError("ContinuousDetection", e.message ?: "unknown", e)
-                ttsManager.speak("检测出错，正在重试")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Continuous detection error: ${e.message}", e)
+                    CrashReporter.reportError("ContinuousDetection", e.message ?: "unknown", e)
+                    ttsManager.speak("检测出错，正在重试")
                 }
                 delay(2000) // 检测间隔，YOLO 快速模式可短些
             }
@@ -553,6 +585,7 @@ class MainActivity : AppCompatActivity() {
         binding.tvStatus.text = getString(com.visionlink.android.R.string.status_continuous_stopped)
         continuousJob?.cancel()
         continuousJob = null
+        cameraManager.stopFrameCollection()
     }
 
     // ========== 模式4: 指向引导 ==========
@@ -755,13 +788,8 @@ class MainActivity : AppCompatActivity() {
      * 选中后复制到应用内部存储，供 Gemma 4 引擎使用
      */
     private fun pickModelFile() {
-        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-            addCategory(Intent.CATEGORY_OPENABLE)
-            type = "*/*"
-            putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("application/octet-stream", "*/*"))
-        }
         try {
-            startActivityForResult(intent, REQUEST_MODEL_FILE)
+            pickModelFileLauncher.launch(arrayOf("*/*"))
             speakSafely("请选择 litertlm 模型文件")
         } catch (e: Exception) {
             Log.e(TAG, "文件选择器启动失败: ${e.message}", e)
@@ -1360,10 +1388,10 @@ class MainActivity : AppCompatActivity() {
 
     private fun requestBluetoothPermissions() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            ActivityCompat.requestPermissions(this, arrayOf(
+            requestOptionalPermissionsLauncher.launch(arrayOf(
                 Manifest.permission.BLUETOOTH_SCAN,
                 Manifest.permission.BLUETOOTH_CONNECT
-            ), 1002)
+            ))
         }
     }
 
@@ -1472,12 +1500,12 @@ class MainActivity : AppCompatActivity() {
             Log.d(TAG, "Required permissions granted")
             // 可选权限单独请求，不影响核心流程
             if (missingOptional.isNotEmpty()) {
-                ActivityCompat.requestPermissions(this, missingOptional.toTypedArray(), 1004)
+                requestOptionalPermissionsLauncher.launch(missingOptional.toTypedArray())
             }
             startCameraWithRetry()
             initVoiceAndRing()
         } else {
-            ActivityCompat.requestPermissions(this, missingRequired.toTypedArray(), REQUEST_PERMISSIONS)
+            requestPermissionsLauncher.launch(missingRequired.toTypedArray())
         }
     }
 
@@ -1532,51 +1560,6 @@ class MainActivity : AppCompatActivity() {
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "Auto-init YOLO failed: ${e.message}")
-            }
-        }
-    }
-
-    override fun onRequestPermissionsResult(code: Int, perms: Array<String>, results: IntArray) {
-        super.onRequestPermissionsResult(code, perms, results)
-        when (code) {
-            REQUEST_PERMISSIONS -> {
-                // 只检查必须权限（相机+录音），通知权限被拒不影响核心功能
-                val cameraGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
-                val audioGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
-                if (cameraGranted && audioGranted) {
-                    Log.d(TAG, "Required permissions granted, starting camera")
-                    startCameraWithRetry()
-                    initVoiceAndRing()
-                } else {
-                    Log.w(TAG, "Required permissions denied: camera=$cameraGranted, audio=$audioGranted")
-                    Toast.makeText(this, getString(com.visionlink.android.R.string.perm_camera_rationale), Toast.LENGTH_LONG).show()
-                }
-            }
-            1004 -> {
-                // 可选权限（通知）结果，忽略
-                Log.d(TAG, "Optional permission result: $perms -> $results")
-            }
-            REQUEST_CAMERA_FOR_CAPTURE -> {
-                if (results.isNotEmpty() && results[0] == PackageManager.PERMISSION_GRANTED) {
-                    Log.d(TAG, "Camera permission granted for capture")
-                    if (pendingCaptureAfterPermission) {
-                        pendingCaptureAfterPermission = false
-                        // 权限刚授予，先启动相机再拍照
-                        scope.launch {
-                            try {
-                                cameraManager.startCamera()
-                                delay(1500)
-                            } catch (e: Exception) {
-                                Log.e(TAG, "Camera start after permission: ${e.message}")
-                            }
-                            if (!isDestroyed && !isFinishing) captureAndAnalyze()
-                        }
-                    }
-                } else {
-                    pendingCaptureAfterPermission = false
-                    Toast.makeText(this, if (isEnglish) "Camera permission denied" else "相机权限被拒绝", Toast.LENGTH_LONG).show()
-                    speakSafely(if (isEnglish) "Camera permission denied" else "相机权限被拒绝")
-                }
             }
         }
     }
@@ -1714,6 +1697,12 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * 仅处理 Rokid 眼镜授权结果。
+     * SDK 的 AuthorizationHelper.requestAuthorization 内部使用固定 requestCode
+     * 调用 startActivityForResult，无法迁移到 ActivityResultContracts，
+     * 其余结果（权限/文件选择）已迁移到各 launcher。
+     */
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == com.visionlink.android.glasses.RokidCxrHelper.REQUEST_AUTH) {
@@ -1740,16 +1729,6 @@ class MainActivity : AppCompatActivity() {
                         speakSafely(if (isEnglish) "Glasses connection failed" else "眼镜连接失败")
                     }
                 }
-            }
-        }
-        
-        // 处理模型文件选择结果
-        if (requestCode == REQUEST_MODEL_FILE) {
-            if (resultCode == RESULT_OK && data?.data != null) {
-                Log.i(TAG, "Model file selected: ${data.data}")
-                copyModelToInternal(data.data!!)
-            } else {
-                Log.w(TAG, "Model file selection cancelled")
             }
         }
     }

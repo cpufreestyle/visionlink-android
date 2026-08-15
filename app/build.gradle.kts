@@ -137,9 +137,6 @@ dependencies {
     // RecyclerView (声纹用户列表)
     implementation("androidx.recyclerview:recyclerview:1.3.2")
 
-    // NanoHTTPD — lightweight embedded HTTP server for A2A Protocol
-    implementation("org.nanohttpd:nanohttpd:2.3.1")
-
     // Multidex
     implementation("androidx.multidex:multidex:2.0.1")
 
