@@ -106,8 +106,8 @@ jobs:
       - name: "Create local.properties (CI fallback: empty API keys)"
         run: |
           cat > local.properties << 'EOF'
-          moonshot.api.key=
-          moonshot.api.key.test=
+          stepfun.api.key=
+          stepfun.api.key.test=
           lmstudio.url=http://10.0.2.2:1234/v1/chat/completions
           EOF
 
