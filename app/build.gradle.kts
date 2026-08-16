@@ -102,7 +102,8 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.7")
 
     // WorkManager：大模型前台服务下载，App 被杀也不中断
-    implementation("androidx.work:work-runtime-ktx:2.10.0")
+    // 2.11.x 要求 AGP 8.6+，当前 AGP 8.5.0 最高支持 2.10.x
+    implementation("androidx.work:work-runtime-ktx:2.10.5")
 
     // CameraX
     implementation("androidx.camera:camera-camera2:1.4.1")
