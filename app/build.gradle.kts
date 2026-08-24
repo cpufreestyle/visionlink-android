@@ -127,7 +127,7 @@ dependencies {
     implementation("com.google.mlkit:text-recognition:16.0.1")
 
     // Google AI Edge LiteRT-LM for on-device LLM inference
-    implementation("com.google.ai.edge.litertlm:litertlm-android:0.16.0")
+    implementation("com.google.ai.edge.litertlm:litertlm-android:0.16.1")
     // GPU backend support
     implementation("com.google.ai.edge.litert:litert-gpu:1.2.0")
     implementation("com.google.android.gms:play-services-tasks:18.2.0")
