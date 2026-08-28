@@ -62,11 +62,8 @@ class VoicePrintManager(private val context: Context) {
         // 录音参数
         private const val ENROLL_DURATION_S = 5.0f    // 注册录音 5 秒
         private const val VERIFY_DURATION_S = 3.0f     // 验证录音 3 秒
-        private const val VAD_SILENCE_S = 1.5f         // VAD 静音停止
-        private const val VAD_MAX_S = 10.0f            // VAD 最大录音
 
         // FBANK 参数 (与 SpeechBrain 一致)
-        private const val N_FFT = 400
         private const val N_MELS = 80
         private const val HOP_LENGTH = 200
         private const val WIN_LENGTH = 400
@@ -80,7 +77,6 @@ class VoicePrintManager(private val context: Context) {
         // ========== FFT 预计算缓存 ==========
         // N_FFT=400 不是 2 的幂，用 512 作为 FFT 大小
         private const val FFT_SIZE = 512
-        private val FFT_SIZE_LOG2 = (Math.log(FFT_SIZE.toDouble()) / Math.log(2.0)).toInt()
 
         // 预计算 bit-reversal 表
         private val BIT_REVERSE_TABLE: IntArray by lazy {
@@ -193,14 +189,6 @@ class VoicePrintManager(private val context: Context) {
     // 可配置阈值
     private var verifyThreshold: Float = DEFAULT_VERIFY_THRESHOLD
     private var identifyThreshold: Float = DEFAULT_IDENTIFY_THRESHOLD
-
-    fun setVerifyThreshold(threshold: Float) {
-        verifyThreshold = threshold.coerceIn(0f, 1f)
-    }
-
-    fun setIdentifyThreshold(threshold: Float) {
-        identifyThreshold = threshold.coerceIn(0f, 1f)
-    }
 
     // ========== 数据类 ==========
 
@@ -511,68 +499,6 @@ class VoicePrintManager(private val context: Context) {
     // ========== VAD 录音 ==========
 
     /**
-     * VAD 录音（检测到静音自动停止）
-     */
-    fun startVadRecording(
-        callback: (result: IdentificationResult) -> Unit
-    ) {
-        if (enrolledUsers.isEmpty() || isRecording.get()) {
-            callback(IdentificationResult(null, null, 0f, false))
-            return
-        }
-
-        recordJob?.cancel()
-        recordJob = scope.launch {
-            isRecording.set(true)
-            try {
-                val audio = recordWithVad(VAD_SILENCE_S, VAD_MAX_S)
-                if (audio.size < SAMPLE_RATE / 2) {
-                    withContext(Dispatchers.Main) {
-                        callback(IdentificationResult(null, null, 0f, false))
-                    }
-                    return@launch
-                }
-
-                val embedding = extractEmbedding(audio)
-                if (embedding == null) {
-                    withContext(Dispatchers.Main) {
-                        callback(IdentificationResult(null, null, 0f, false))
-                    }
-                    return@launch
-                }
-
-                // 1:N 识别
-                var bestUser: VoicePrintUser? = null
-                var bestScore = -1.0f
-                for (user in enrolledUsers.values) {
-                    val score = cosineSimilarity(embedding, user.embedding)
-                    if (score > bestScore) {
-                        bestScore = score
-                        bestUser = user
-                    }
-                }
-
-                val isMatch = bestScore >= identifyThreshold
-                withContext(Dispatchers.Main) {
-                    callback(IdentificationResult(
-                        userId = if (isMatch) bestUser?.userId else null,
-                        name = if (isMatch) bestUser?.name else null,
-                        score = bestScore,
-                        isMatch = isMatch
-                    ))
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "VAD error: ${e.message}", e)
-                withContext(Dispatchers.Main) {
-                    callback(IdentificationResult(null, null, 0f, false))
-                }
-            } finally {
-                isRecording.set(false)
-            }
-        }
-    }
-
-    /**
      * 停止录音
      */
     fun stopRecording() {
@@ -643,76 +569,6 @@ class VoicePrintManager(private val context: Context) {
 
         // Short → Float [-1, 1]
         return FloatArray(read) { shortBuffer[it] / 32768.0f }
-    }
-
-    /**
-     * VAD 录音
-     */
-    private fun recordWithVad(silenceDurationS: Float, maxDurationS: Float): FloatArray {
-        val maxSamples = (SAMPLE_RATE * maxDurationS).toInt()
-        val silenceSamples = (SAMPLE_RATE * silenceDurationS).toInt()
-        val frameSize = 320 // 20ms at 16kHz
-
-        val bufferSize = maxOf(
-            AudioRecord.getMinBufferSize(SAMPLE_RATE, CHANNEL_CONFIG, AUDIO_FORMAT),
-            SAMPLE_RATE * 2
-        )
-
-        val recorder = AudioRecord(
-            MediaRecorder.AudioSource.MIC,
-            SAMPLE_RATE,
-            CHANNEL_CONFIG,
-            AUDIO_FORMAT,
-            bufferSize
-        )
-
-        val audioBuffer = java.io.ByteArrayOutputStream()
-        val frame = ShortArray(frameSize)
-        recorder.startRecording()
-
-        var totalSamples = 0
-        var silenceCount = 0
-        var hasSpeech = false
-        val energyThreshold = 500.0 // Short 值能量阈值
-
-        while (totalSamples < maxSamples && isRecording.get()) {
-            val n = recorder.read(frame, 0, frameSize)
-            if (n <= 0) continue
-
-            // 计算能量
-            var energy = 0.0
-            for (i in 0 until n) {
-                energy += frame[i].toDouble() * frame[i]
-            }
-            energy /= n
-
-            if (energy > energyThreshold) {
-                hasSpeech = true
-                silenceCount = 0
-            } else if (hasSpeech) {
-                silenceCount += n
-                if (silenceCount >= silenceSamples) break
-            }
-
-            // 写入 buffer
-            for (i in 0 until n) {
-                audioBuffer.write(frame[i].toInt() and 0xFF)
-                audioBuffer.write((frame[i].toInt() shr 8) and 0xFF)
-            }
-            totalSamples += n
-        }
-
-        recorder.stop()
-        recorder.release()
-
-        // Byte → Float
-        val bytes = audioBuffer.toByteArray()
-        val samples = FloatArray(bytes.size / 2)
-        for (i in samples.indices) {
-            val s = (bytes[i * 2].toInt() and 0xFF) or ((bytes[i * 2 + 1].toInt() and 0xFF) shl 8)
-            samples[i] = (s.toShort().toInt() / 32768.0f)
-        }
-        return samples
     }
 
     // ========== 特征提取 ==========
@@ -848,71 +704,6 @@ class VoicePrintManager(private val context: Context) {
         }
         return result
     }
-
-    /**
-     * 旧版 FFT (保留兼容，未使用预计算表)
-     */
-    private fun fft(input: FloatArray): FloatArray {
-        val n = input.size
-        val real = input.copyOf()
-        val imag = FloatArray(n)
-
-        // Bit reversal
-        var j = 0
-        for (i in 1 until n) {
-            var bit = n shr 1
-            while (j and bit != 0) {
-                j = j xor bit
-                bit = bit shr 1
-            }
-            j = j or bit
-            if (i < j) {
-                var t = real[i]; real[i] = real[j]; real[j] = t
-                t = imag[i]; imag[i] = imag[j]; imag[j] = t
-            }
-        }
-
-        // Cooley-Tukey
-        var len = 2
-        while (len <= n) {
-            val angle = -2 * Math.PI / len
-            val wReal = Math.cos(angle).toFloat()
-            val wImag = Math.sin(angle).toFloat()
-            var i = 0
-            while (i < n) {
-                var wr = 1f
-                var wi = 0f
-                for (k in 0 until len / 2) {
-                    val tr = wr * real[i + k + len / 2] - wi * imag[i + k + len / 2]
-                    val ti = wr * imag[i + k + len / 2] + wi * real[i + k + len / 2]
-                    real[i + k + len / 2] = real[i + k] - tr
-                    imag[i + k + len / 2] = imag[i + k] - ti
-                    real[i + k] += tr
-                    imag[i + k] += ti
-                    val nw = wr * wReal - wi * wImag
-                    wi = wr * wImag + wi * wReal
-                    wr = nw
-                }
-                i += len
-            }
-            len *= 2
-        }
-
-        // Interleave output
-        val result = FloatArray(2 * n)
-        for (i in 0 until n) {
-            result[2 * i] = real[i]
-            result[2 * i + 1] = imag[i]
-        }
-        return result
-    }
-
-    /**
-     * 创建 Mel 滤波器组 (实例方法，委托给静态版本)
-     */
-    private fun createMelFilterBank(
-        nFft: Int, nMels: Int, sampleRate: Int, fMin: Float, fMax: Float
-    ): Array<FloatArray> = createMelFilterBankStatic(nFft, nMels, sampleRate, fMin, fMax)
 
     // ========== ONNX 推理 ==========
 

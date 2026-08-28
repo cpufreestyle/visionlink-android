@@ -1396,13 +1396,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun applyLanguage() {
+        // AppCompatDelegate 自动重建 Activity 并持久化语言设置（替代废弃的 updateConfiguration+recreate）
         val locale = if (isEnglish) java.util.Locale.ENGLISH else java.util.Locale("zh", "CN")
-        java.util.Locale.setDefault(locale)
-        val config = Configuration(resources.configuration)
-        config.setLocale(locale)
-        @Suppress("DEPRECATION")
-        resources.updateConfiguration(config, resources.displayMetrics)
-        recreate()
+        androidx.appcompat.app.AppCompatDelegate.setApplicationLocales(
+            androidx.core.os.LocaleListCompat.forLanguageTags(locale.toLanguageTag())
+        )
     }
 
     override fun attachBaseContext(newBase: Context) {
@@ -1617,26 +1615,34 @@ class MainActivity : AppCompatActivity() {
     }
     
     /**
+     * 更新眼镜连接状态 UI（供 checkGlassesConnection/connectGlasses/onActivityResult 共用）
+     */
+    private fun showGlassesConnectionState(connected: Boolean, announce: Boolean) {
+        if (connected) {
+            binding.tvGlassesStatus.text = if (isEnglish) {
+                "Glasses: ${glassesManager.getDeviceName()}"
+            } else {
+                "眼镜: ${glassesManager.getDeviceName()}"
+            }
+            binding.tvGlassesStatus.setTextColor(0xFF00FF00.toInt())
+            if (announce) speakSafely(if (isEnglish) "Glasses connected" else "眼镜已连接")
+            // 设置功能图标，启用眼镜端交互
+            glassesManager.setupFunctionIcons()
+        } else {
+            val err = glassesManager.errorMessage
+            binding.tvGlassesStatus.text = if (err.isNotEmpty()) err
+            else getString(com.visionlink.android.R.string.glasses_disconnected)
+            binding.tvGlassesStatus.setTextColor(0xFFFF0000.toInt())
+            if (announce) speakSafely(if (isEnglish) "Glasses connection failed" else "眼镜连接失败")
+        }
+    }
+
+    /**
      * Check and update glasses connection status
      */
     private fun checkGlassesConnection() {
         glassesManager.connect { connected ->
-            runOnUiThread {
-                if (connected) {
-                    binding.tvGlassesStatus.text = if (isEnglish) {
-                        "Glasses: ${glassesManager.getDeviceName()}"
-                    } else {
-                        "眼镜: ${glassesManager.getDeviceName()}"
-                    }
-                    binding.tvGlassesStatus.setTextColor(0xFF00FF00.toInt())
-                    speakSafely(if (isEnglish) "Glasses connected" else "眼镜已连接")
-                    // 设置功能图标，启用眼镜端交互
-                    glassesManager.setupFunctionIcons()
-                } else {
-                    binding.tvGlassesStatus.text = getString(com.visionlink.android.R.string.glasses_disconnected)
-                    binding.tvGlassesStatus.setTextColor(0xFFFF0000.toInt())
-                }
-            }
+            runOnUiThread { showGlassesConnectionState(connected, announce = true) }
         }
     }
 
@@ -1654,23 +1660,7 @@ class MainActivity : AppCompatActivity() {
 
         val started = glassesManager.requestAuthAndConnect(this) { connected ->
             // 即时授权回调（在 IO 线程）
-            runOnUiThread {
-                if (connected) {
-                    binding.tvGlassesStatus.text = if (isEnglish) {
-                        "Glasses: ${glassesManager.getDeviceName()}"
-                    } else {
-                        "眼镜: ${glassesManager.getDeviceName()}"
-                    }
-                    binding.tvGlassesStatus.setTextColor(0xFF00FF00.toInt())
-                    speakSafely(if (isEnglish) "Glasses connected" else "眼镜已连接")
-                    glassesManager.setupFunctionIcons()
-                } else {
-                    val err = glassesManager.errorMessage
-                    binding.tvGlassesStatus.text = if (err.isNotEmpty()) err else getString(com.visionlink.android.R.string.glasses_disconnected)
-                    binding.tvGlassesStatus.setTextColor(0xFFFF0000.toInt())
-                    speakSafely(if (isEnglish) "Glasses connection failed" else "眼镜连接失败")
-                }
-            }
+            runOnUiThread { showGlassesConnectionState(connected, announce = true) }
         }
 
         if (!started) {
@@ -1711,24 +1701,7 @@ class MainActivity : AppCompatActivity() {
             glassesAuthTimeoutJob?.cancel()
             glassesAuthTimeoutJob = null
             glassesManager.handleAuthResult(resultCode, data) { connected ->
-                runOnUiThread {
-                    if (connected) {
-                        binding.tvGlassesStatus.text = if (isEnglish) {
-                            "Glasses: ${glassesManager.getDeviceName()}"
-                        } else {
-                            "眼镜: ${glassesManager.getDeviceName()}"
-                        }
-                        binding.tvGlassesStatus.setTextColor(0xFF00FF00.toInt())
-                        speakSafely(if (isEnglish) "Glasses connected" else "眼镜已连接")
-                        // 设置功能图标，启用眼镜端交互
-                        glassesManager.setupFunctionIcons()
-                    } else {
-                        val err = glassesManager.errorMessage
-                        binding.tvGlassesStatus.text = if (err.isNotEmpty()) err else getString(com.visionlink.android.R.string.glasses_disconnected)
-                        binding.tvGlassesStatus.setTextColor(0xFFFF0000.toInt())
-                        speakSafely(if (isEnglish) "Glasses connection failed" else "眼镜连接失败")
-                    }
-                }
+                runOnUiThread { showGlassesConnectionState(connected, announce = true) }
             }
         }
     }
