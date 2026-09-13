@@ -2,9 +2,9 @@
 // 要求: Android 13+ (API 33+)
 
 plugins {
-    id("com.android.application") version "8.5.2" apply false
-    id("org.jetbrains.kotlin.android") version "2.4.10" apply false
+    id("com.android.application") version "9.4.0" apply false
 }
+// AGP 9.0+ 内置 Kotlin 支持，不再使用独立的 org.jetbrains.kotlin.android 插件
 
 // 从 local.properties 读取 API Key（不提交到 git）
 val localProps = java.util.Properties().apply {

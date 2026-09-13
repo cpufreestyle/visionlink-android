@@ -25,9 +25,11 @@
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <!-- BLE feature -->
     <uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
 
     <!-- Location permission (required for BLE scanning on Android < 12) -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
     <!-- APK install permission (for in-app updates) -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />

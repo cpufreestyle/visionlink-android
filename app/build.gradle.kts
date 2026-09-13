@@ -1,11 +1,11 @@
 plugins {
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
 }
+// AGP 9.0+ 内置 Kotlin 支持，Kotlin 编译选项通过 android.kotlin DSL 配置
 
 android {
     namespace = "com.visionlink.android"
-    compileSdk = 35
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.visionlink.android"
@@ -118,10 +118,10 @@ dependencies {
     implementation("com.rokid.cxr:client-l:1.0.3")
 
     // HTTP client for API calls (also used for LM Studio connection)
-    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.squareup.okhttp3:okhttp:5.5.0")
 
     // MediaPipe Tasks Vision: 端侧实时手部关键点 + 物体检测（指向引导模式）
-    implementation("com.google.mediapipe:tasks-vision:0.10.21")
+    implementation("com.google.mediapipe:tasks-vision:1.0.0")
 
     // ML Kit Text Recognition: 端侧离线 OCR（模式2 文字识别）
     implementation("com.google.mlkit:text-recognition:16.0.1")

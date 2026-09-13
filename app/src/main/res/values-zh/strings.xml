@@ -87,4 +87,7 @@
     <string name="glasses_connecting">正在连接眼镜...</string>
     <string name="glasses_connect_success">眼镜连接成功</string>
     <string name="glasses_connect_failed">眼镜连接失败</string>
+    <string name="api_test_success">API 测试: 成功\n%1$s</string>
+    <string name="api_test_failed">API 测试: 失败\n%1$s</string>
+    <string name="api_test_waiting">正在测试 API...</string>
     </resources>

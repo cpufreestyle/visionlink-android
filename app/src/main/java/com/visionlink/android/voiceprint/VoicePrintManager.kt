@@ -49,6 +49,8 @@ import kotlin.math.pow
  * }
  * ```
  */
+// AudioRecord 录音所需 RECORD_AUDIO 权限由 MainActivity 启动时的必须权限流程统一授予
+@android.annotation.SuppressLint("MissingPermission")
 class VoicePrintManager(private val context: Context) {
 
     companion object {

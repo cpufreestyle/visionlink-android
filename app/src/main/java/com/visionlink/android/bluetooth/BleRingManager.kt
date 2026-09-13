@@ -26,6 +26,12 @@ import java.util.UUID
  * - 连接/断开管理
  * - 手势/按键事件回调
  */
+/**
+ * BLE 指环管理器。
+ * 所有蓝牙操作（扫描/连接/GATT）统一由 startScan() 入口的 hasPermissions() 守卫
+ * （BLUETOOTH_SCAN + BLUETOOTH_CONNECT），故类级别抑制 MissingPermission lint。
+ */
+@android.annotation.SuppressLint("MissingPermission")
 class BleRingManager(
     private val context: Context,
     private val onEvent: (RingEvent) -> Unit
