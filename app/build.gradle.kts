@@ -133,7 +133,7 @@ dependencies {
     implementation("com.google.android.gms:play-services-tasks:18.2.0")
 
     // ONNX Runtime (端侧声纹识别推理)
-    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.29.0")
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.30.0")
 
     // RecyclerView (声纹用户列表)
     implementation("androidx.recyclerview:recyclerview:1.4.0")
