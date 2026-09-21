@@ -2,7 +2,7 @@
 // 要求: Android 13+ (API 33+)
 
 plugins {
-    id("com.android.application") version "9.4.0" apply false
+    id("com.android.application") version "9.4.1" apply false
 }
 // AGP 9.0+ 内置 Kotlin 支持，不再使用独立的 org.jetbrains.kotlin.android 插件
 
