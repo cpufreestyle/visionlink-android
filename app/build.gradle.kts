@@ -103,7 +103,7 @@ dependencies {
 
     // WorkManager：大模型前台服务下载，App 被杀也不中断
     // 2.11.x 要求 AGP 8.6+，当前 AGP 8.5.0 最高支持 2.10.x
-    implementation("androidx.work:work-runtime-ktx:2.10.5")
+    implementation("androidx.work:work-runtime-ktx:2.12.0")
 
     // CameraX
     implementation("androidx.camera:camera-camera2:1.4.1")
