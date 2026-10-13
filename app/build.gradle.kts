@@ -121,7 +121,7 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:5.5.0")
 
     // MediaPipe Tasks Vision: 端侧实时手部关键点 + 物体检测（指向引导模式）
-    implementation("com.google.mediapipe:tasks-vision:1.0.0")
+    implementation("com.google.mediapipe:tasks-vision:1.1.0")
 
     // ML Kit Text Recognition: 端侧离线 OCR（模式2 文字识别）
     implementation("com.google.mlkit:text-recognition:16.0.1")
